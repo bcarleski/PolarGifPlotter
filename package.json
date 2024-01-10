@@ -1,0 +1,20 @@
+{
+  "name": "polargifplotter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "draw.js",
+  "scripts": {
+    "draw": "node draw.js",
+    "generate": "rm -rf dist && tsc && node dist/generate.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "gifencoder": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.8",
+    "typescript": "^5.3.3"
+  }
+}
