@@ -40,3 +40,17 @@ void Point::repoint(float radius, float azimuth) {
   this->radius = radius;
   this->azimuth = azimuth;
 }
+
+void Point::cartesianRepoint(float x, float y) {
+  this->x = x;
+  this->y = y;
+  this->radius = sqrt(x * x + y * y);
+  this->azimuth = atan2(y, x);
+}
+
+void Point::cloneFrom(Point& other) {
+  this->x = other.x;
+  this->y = other.y;
+  this->radius = other.radius;
+  this->azimuth = other.azimuth;
+}

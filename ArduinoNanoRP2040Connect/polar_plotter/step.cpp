@@ -8,7 +8,7 @@ Step::Step() {
   this->state = 0;
 }
 
-Step::Step(int radiusStep, int azimuthStep) {
+void Step::setSteps(int radiusStep, int azimuthStep) {
   byte state = 0;
 
   if (radiusStep > 0) {

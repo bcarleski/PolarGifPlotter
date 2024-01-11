@@ -15,4 +15,6 @@ class Point {
     float getRadius();
     float getAzimuth();
     void repoint(float radius, float azimuth);
+    void cartesianRepoint(float x, float y);
+    void cloneFrom(Point& other);
 };

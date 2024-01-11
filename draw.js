@@ -2,21 +2,27 @@ const { createCanvas } = require("canvas");
 const fs = require("fs");
 const GIFEncoder = require("gifencoder");
 
+const CSV_FILE_PATH = '/Users/carleski/serial.log';
 const width = 1200;
 const height = 1200;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
 const marbleSize = 8;
-const pointsCsv = fs.readFileSync('./points.csv');
-const points = pointsCsv.toString("utf-8").split('\n').map(line => {
-    const parts = line.split(',');
-    return {x:parseFloat(parts[0]),y:parseFloat(parts[1]),r:parseFloat(parts[2]),a:parseFloat(parts[3])};
-});
-const batchSize = points.length > 20 ? Math.floor(points.length / 20) : 1;
+const radiusStepSize = 1;
+const azimuthStepSize = -1 * Math.PI / 360.0;
+const stepsCsv = fs.readFileSync(CSV_FILE_PATH);
+const steps = stepsCsv.toString("utf-8")
+                      .split('\n')
+                      .filter(line => line.length > 0 && line.indexOf(',') > 0 && line.indexOf(' ') === -1)
+                      .map(line => {
+                          const parts = line.split(',');
+                          return {radiusStep:parseInt(parts[0]),azimuthStep:parseInt(parts[1])};
+                      });
+const batchSize = steps.length > 20 ? Math.floor(steps.length / 20) : 1;
 const batchAccumulator = [];
 const batches = [];
-points.forEach(point => {
-    batchAccumulator.push(point);
+steps.forEach(step => {
+    batchAccumulator.push(step);
     if (batchAccumulator.length == batchSize) {
         batches.push([...batchAccumulator]);
         batchAccumulator.splice(0, batchAccumulator.length);
@@ -46,7 +52,7 @@ const buffer = encoder.out.getData();
 fs.writeFileSync("./image.gif", buffer);
 console.log("Wrote animated GIF to image.gif");
 
-const finalImage = getImage(batches.length - 1)[0];
+const finalImage = getImage(batches.length - 1, false)[0];
 const imageBuffer = finalImage.toBuffer("image/png");
 fs.writeFileSync("./image.png", imageBuffer);
 console.log("Write final image to image.png");
@@ -55,37 +61,55 @@ console.log("Write final image to image.png");
 function getImage(maxBatch, debugLines) {
     const canvas = createCanvas(width, height);
     const context = canvas.getContext("2d");
-    var xPos = polarOriginX;
-    var yPos = polarOriginY;
+    const maxRadius = Math.min(width, height) / 2;
+    var radius = 0;
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
+    context.translate(polarOriginX, polarOriginY);
 
     context.strokeStyle = "#000000";
-    context.beginPath();
-    context.arc(xPos, yPos, Math.min(width, height) / 2, 0, 2 * Math.PI);
-    context.stroke();
-
     context.lineCap = "round";
     context.lineWidth = marbleSize;
 
     for (let j = 0; j <= maxBatch; j++) {
         const batch = batches[j];
-        batch.forEach(point => {
-            context.beginPath();
-            context.moveTo(xPos, yPos);
-    
-            xPos = polarOriginX + point.x;
-            yPos = polarOriginY - point.y;
-
-            if (debugLines) {
-                console.log("Drawing line to %f x %f, for point (%f, %f)", xPos, yPos, point.x, point.y);
+        batch.forEach(step => {
+            if (step.azimuthStep == 0 && step.radiusStep == 0) {
+                return;
             }
-    
-            context.lineTo(xPos, yPos);
-            context.stroke();
+
+            if (step.azimuthStep != 0) {
+                const azimuthDelta = azimuthStepSize * step.azimuthStep;
+                context.rotate(azimuthDelta);
+                context.beginPath();
+                context.arc(0, 0, Math.abs(radius), 0, -1 * azimuthDelta, azimuthDelta > 0);
+                context.stroke();
+                if (debugLines) {
+                    console.log('Rotating %f', azimuthDelta);
+                }
+            }
+            if (step.radiusStep != 0) {
+                const radiusDelta = radiusStepSize * step.radiusStep;
+                context.beginPath();
+                context.moveTo(radius, 0);
+                context.lineTo(radius + radiusDelta, 0);
+                context.stroke();
+
+                if (debugLines) {
+                    console.log('Pushing from %f to %f', radius, radius + radiusDelta);
+                }
+                radius += radiusDelta;
+            }
         });
     }
+
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(0, 0, maxRadius, 0, 2 * Math.PI);
+    context.moveTo(0, -1 * maxRadius);
+    context.lineTo(0, -1 * maxRadius + 8);
+    context.stroke();
 
     return [canvas, context];
 }

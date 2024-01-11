@@ -5,7 +5,7 @@ class Step {
     byte state;
   public:
     Step();
-    Step(int radiusStep, int azimuthStep);
+    void setSteps(int radiusStep, int azimuthStep);
     int getRadiusStep();
     int getAzimuthStep();
 };

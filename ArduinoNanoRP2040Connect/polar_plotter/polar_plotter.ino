@@ -1,39 +1,38 @@
-#include "lineSteps.h"
+#include "polarPlotter.h"
 
-Point current;
-LineSteps steps;
+PolarPlotter plotter;
 bool hasSteps = false;
-unsigned int stepIndex = 0;
-float radiusStepSize = 0.5;
+float maxRadius = 600;
+float radiusStepSize = 1;
 float azimuthStepSize = PI / 360.0;
 
 void setup() {
   Serial.begin(9600);
+  plotter.init(maxRadius, radiusStepSize, azimuthStepSize);
 }
 
 void loop() {
   if (Serial.available()) {
-    String command = Serial.readStringUntil('\n');
-
-    wipe();
-    steps = *(new LineSteps(command, current, radiusStepSize, azimuthStepSize));
-    hasSteps = true;
+    handleInput();
   }
 
   if (hasSteps) {
-    if (stepIndex < steps.getStepCount()) {
-      Step step = steps.getStep(stepIndex);
-      stepIndex++;
-      Serial.print(step.getRadiusStep());
-      Serial.print(",");
-      Serial.println(step.getAzimuthStep());
-    } else {
-      hasSteps = false;
-    }
+    hasSteps = plotter.step();
   }
 }
 
-void wipe() {
-  Serial.println("WIPE");
-  current.repoint(0, 0);
+void handleInput() {
+  String command = Serial.readStringUntil('\n');
+  command.toLowerCase();
+
+  if (command == "help" || command == "--help" || command == "-help" || command == "/help" || command == "-h" || command == "/h" || command == "-?" || command == "/?") {
+    String helpMessage = PolarPlotter::getHelpMessage();
+    Serial.println(helpMessage);
+  } else if (command.startsWith("d")) {
+    unsigned int debugLevel = (unsigned int)command.substring(1).toInt();
+    plotter.setDebug(debugLevel);
+  } else {
+    plotter.computeSteps(command);
+    hasSteps = true;
+  }
 }
