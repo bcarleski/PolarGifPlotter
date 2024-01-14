@@ -1,7 +1,6 @@
 #include "stepBank.h"
 
-StepBank::StepBank() {
-  this->stepCount = 0;
+StepBank::StepBank(CondOut& condOut) : condOut(condOut) {
 }
 
 void StepBank::addStep(int radiusStep, int azimuthStep) {
@@ -13,6 +12,12 @@ void StepBank::addStep(int radiusStep, int azimuthStep) {
 }
 
 Step StepBank::getStep(unsigned int stepIndex) {
+  if (this->debugLevel >= 5) {
+    condOut.print("     Getting Step ");
+    condOut.print(stepIndex);
+    condOut.print(" of ");
+    condOut.println(this->stepCount);
+  }
   if (stepIndex < 0 || stepIndex >= this->stepCount) {
     return this->blankStep;
   }
@@ -26,4 +31,8 @@ unsigned int StepBank::getStepCount() {
 
 void StepBank::reset() {
   this->stepCount = 0;
+}
+
+void StepBank::setDebug(unsigned int level) {
+  this->debugLevel = level;
 }

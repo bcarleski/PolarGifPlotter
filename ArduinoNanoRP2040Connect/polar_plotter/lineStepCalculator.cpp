@@ -1,11 +1,10 @@
 #include "lineStepCalculator.h"
 
-LineStepCalculator::LineStepCalculator() {
-}
-
-void LineStepCalculator::init(float radiusStepSize, float azimuthStepSize) {
-  this->radiusStepSize = radiusStepSize;
-  this->azimuthStepSize = azimuthStepSize;
+LineStepCalculator::LineStepCalculator(CondOut& condOut, float radiusStepSize, float azimuthStepSize)
+  : condOut(condOut),
+    radiusStepSize(radiusStepSize),
+    azimuthStepSize(azimuthStepSize)
+{
 }
 
 void LineStepCalculator::addLineSteps(Point& start, Point& finish, StepBank& steps) {
@@ -17,23 +16,31 @@ void LineStepCalculator::addLineSteps(Point& start, Point& finish, StepBank& ste
   int radiusSteps = round(abs(finish.getRadius() - start.getRadius()) / this->radiusStepSize);
   int azimuthSteps = round(abs(finish.getAzimuth() - startA) / this->azimuthStepSize);
 
-  if (this->debugLevel >= 1) {
-    Serial.print(" Going from (");
-    Serial.print(start.getX(), 4);
-    Serial.print(",");
-    Serial.print(start.getY(), 4);
-    Serial.print(") to (");
-    Serial.print(finish.getX(), 4);
-    Serial.print(",");
-    Serial.print(finish.getY(), 4);
-    Serial.print(") in ");
-    Serial.print(radiusSteps);
-    Serial.print(" radius steps and ");
-    Serial.print(azimuthSteps);
-    Serial.print(" azimuth steps with a radius step offset of ");
-    Serial.print(radiusStepOffset, 4);
-    Serial.print(" and an azimuth step offset of ");
-    Serial.println(azimuthStepOffset, 4);
+  if (this->debugLevel >= 2) {
+    this->condOut.print(" Going from (");
+    this->condOut.print(start.getX(), 4);
+    this->condOut.print(",");
+    this->condOut.print(start.getY(), 4);
+    this->condOut.print(",");
+    this->condOut.print(start.getRadius(), 4);
+    this->condOut.print(",");
+    this->condOut.print(start.getAzimuth(), 4);
+    this->condOut.print(") to (");
+    this->condOut.print(finish.getX(), 4);
+    this->condOut.print(",");
+    this->condOut.print(finish.getY(), 4);
+    this->condOut.print(",");
+    this->condOut.print(finish.getRadius(), 4);
+    this->condOut.print(",");
+    this->condOut.print(finish.getAzimuth(), 4);
+    this->condOut.print(") in ");
+    this->condOut.print(radiusSteps);
+    this->condOut.print(" radius steps and ");
+    this->condOut.print(azimuthSteps);
+    this->condOut.print(" azimuth steps with a radius step offset of ");
+    this->condOut.print(radiusStepOffset, 4);
+    this->condOut.print(" and an azimuth step offset of ");
+    this->condOut.println(azimuthStepOffset, 4);
   }
 
   // If we are at the origin, make sure we are pointed in the right direction before heading out

@@ -2,14 +2,16 @@ const { createCanvas } = require("canvas");
 const fs = require("fs");
 const GIFEncoder = require("gifencoder");
 
-const CSV_FILE_PATH = '/Users/carleski/serial.log';
+const CSV_FILE_PATH = './serial.log';
 const width = 1200;
 const height = 1200;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
+const enableGif = false;
+const enablePng = true;
 const marbleSize = 8;
-const radiusStepSize = 1;
-const azimuthStepSize = -1 * Math.PI / 360.0;
+const radiusStepSize = 4;
+const azimuthStepSize = -1 * Math.PI / 180.0;
 const stepsCsv = fs.readFileSync(CSV_FILE_PATH);
 const steps = stepsCsv.toString("utf-8")
                       .split('\n')
@@ -32,31 +34,34 @@ if (batchAccumulator.length > 0) {
     batches.push([...batchAccumulator]);
 }
 
-const encoder = new GIFEncoder(width, height);
-encoder.start();
-encoder.setRepeat(0);
-encoder.setDelay(500);
-encoder.setQuality(10);
+if (enableGif) {
+    const encoder = new GIFEncoder(width, height);
+    encoder.start();
+    encoder.setRepeat(0);
+    encoder.setDelay(500);
+    encoder.setQuality(10);
 
-for (let i = -1; i < batches.length; i++) {
-    console.log("FRAME " + (i + 1) + " of " + batches.length);
+    for (let i = -1; i < batches.length; i++) {
+        console.log("FRAME " + (i + 1) + " of " + batches.length);
 
-    const frame = getImage(i);
+        const frame = getImage(i);
 
-    encoder.addFrame(frame[1]);
+        encoder.addFrame(frame[1]);
+    }
+
+    encoder.finish();
+
+    const buffer = encoder.out.getData();
+    fs.writeFileSync("./image.gif", buffer);
+    console.log("Wrote animated GIF to image.gif");
 }
 
-encoder.finish();
-
-const buffer = encoder.out.getData();
-fs.writeFileSync("./image.gif", buffer);
-console.log("Wrote animated GIF to image.gif");
-
-const finalImage = getImage(batches.length - 1, false)[0];
-const imageBuffer = finalImage.toBuffer("image/png");
-fs.writeFileSync("./image.png", imageBuffer);
-console.log("Write final image to image.png");
-
+if (enablePng) {
+    const finalImage = getImage(batches.length - 1, false)[0];
+    const imageBuffer = finalImage.toBuffer("image/png");
+    fs.writeFileSync("./image.png", imageBuffer);
+    console.log("Write final image to image.png");
+}
 
 function getImage(maxBatch, debugLines) {
     const canvas = createCanvas(width, height);

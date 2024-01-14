@@ -133,3 +133,5 @@ dist
 *.gif
 *.png
 *.csv
+secrets.h
+
