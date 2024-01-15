@@ -1,6 +1,8 @@
-#include "constants.h"
 #include "secrets.h"
-#include "plotterController.h"
+#include "constants.h"
+
+#include <PolarPlotterCore.h>
+#include <Stepper.h>
 
 #if USE_CLOUD > 0
 #include <ArduinoBearSSL.h>
@@ -19,17 +21,11 @@ MqttClient mqttClient(sslClient);
 unsigned long lastCloudCheck = 0;
 #endif
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
-CondOut condOut(lcd);
+CondOut condOut(lcd, USE_LCD != 0);
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
-PolarPlotter plotter(condOut, radiusStepper, azimuthStepper, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE);
+PolarPlotter plotter(condOut, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE, MARBLE_SIZE_IN_RADIUS_STEPS);
 PlotterController controller(plotter, IOT_DEVICE_NAME, IOT_DEVICE_SHADOW_NAME);
-bool hasSteps = false;
-bool hasRequestedNewDrawing = false;
-bool hasRequestedNextLine = false;
-String currentDrawing = "";
-int currentLine;
-int totalLines;
 
 void setup() {
   condOut.init();
@@ -38,10 +34,14 @@ void setup() {
 
   controller.onMessage(publishMessage);
   controller.onMqttPoll(pollMqtt);
+  radiusStepper.setSpeed(RADIUS_RPMS);
+  azimuthStepper.setSpeed(AZIMUTH_RPMS);
+  plotter.onStep(performStep);
+
 #if USE_CLOUD > 0
   if (!ECCX08.begin()) {
     condOut.lcdPrint("No ECCX08");
-    condOut.println(" No ECCX08 present!");
+    condOut.println("No ECCX08 present!");
     while (true)
       ;
   }
@@ -93,6 +93,11 @@ bool pollMqtt(String topics[]) {
 #endif
 
   return false;
+}
+
+void performStep(int radiusSteps, int azimuthSteps) {
+  radiusStepper.step(radiusSteps);
+  azimuthStepper.step(azimuthSteps);
 }
 
 void publishMessage(const String& topic, const JSONVar& payload) {
@@ -168,7 +173,7 @@ void onMessageReceived(int messageSize) {
 
   const String message = bytes;
   const String blank = "";
-  condOut.print("Received message: TOPIC=" + topic + ", MESSAGE=" + message);
+  condOut.println("Received message: TOPIC=" + topic + ", MESSAGE=" + message);
   condOut.lcdPrint("Received message", blank + messageSize);
   controller.messageReceived(topic, message);
 }
