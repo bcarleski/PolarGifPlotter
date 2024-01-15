@@ -7,17 +7,17 @@ const width = 1200;
 const height = 1200;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
-const enableGif = false;
+const enableGif = true;
 const enablePng = true;
 const marbleSize = 8;
-const radiusStepSize = 4;
-const azimuthStepSize = -1 * Math.PI / 180.0;
+const radiusStepSize = 1;
+const azimuthStepSize = -1 * Math.PI / 100.0;
 const stepsCsv = fs.readFileSync(CSV_FILE_PATH);
 const steps = stepsCsv.toString("utf-8")
                       .split('\n')
-                      .filter(line => line.length > 0 && line.indexOf(',') > 0 && line.indexOf(' ') === -1)
+                      .filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('STEP: '))
                       .map(line => {
-                          const parts = line.split(',');
+                          const parts = line.substring(6).split(',');
                           return {radiusStep:parseInt(parts[0]),azimuthStep:parseInt(parts[1])};
                       });
 const batchSize = steps.length > 20 ? Math.floor(steps.length / 20) : 1;
