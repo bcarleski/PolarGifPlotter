@@ -5,131 +5,119 @@
 #include <Stepper.h>
 
 #if USE_CLOUD > 0
-#include <ArduinoBearSSL.h>
-#include <ArduinoECCX08.h>
-#include <ArduinoMqttClient.h>
-#include <WiFiNINA.h>  // change to #include <WiFi101.h> for MKR1000
+#include <WiFiNINA.h>
+#include "drawingClient.h"
 
-const String deviceName = IOT_DEVICE_NAME;
-const String deviceShadowName = IOT_DEVICE_SHADOW_NAME;
-const char broker[] = SECRET_BROKER;
-const char* certificate = SECRET_CERTIFICATE;
+const String drawingsHost = DRAWINGS_HOST;
+const int drawingsPort = DRAWINGS_PORT;
+const String drawingsFile = DRAWINGS_FILE;
+const String drawingPathPrefix = DRAWING_PATH_PREFIX;
 
-WiFiClient wifiClient;                // Used for the TCP socket connection
-BearSSLClient sslClient(wifiClient);  // Used for SSL/TLS connection, integrates with ECC508
-MqttClient mqttClient(sslClient);
+WiFiClient wifiClient;
+HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
+DrawingClient drawings(httpClient, drawingsFile, drawingPathPrefix);
 #endif
+
 LiquidCrystal lcd(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
 CondOut condOut(lcd, USE_LCD != 0);
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
 PolarPlotter plotter(condOut, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE, MARBLE_SIZE_IN_RADIUS_STEPS);
-PlotterController controller(plotter, IOT_DEVICE_NAME, IOT_DEVICE_SHADOW_NAME);
-unsigned long lastCloudCheck = 0;
+PlotterController controller(condOut, plotter);
+
+unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
+unsigned long drawingUpdateAttempt = 0;
+unsigned long lastStepTimeMillis = 0;
 
 void setup() {
   condOut.init();
+  delay(2000);
+
   condOut.println("Starting Setup");
   condOut.lcdPrint("START SETUP", "");
 
-  controller.onMessage(publishMessage);
-  controller.onMqttPoll(pollMqtt);
-  radiusStepper.setSpeed(RADIUS_RPMS);
-  azimuthStepper.setSpeed(AZIMUTH_RPMS);
+  radiusStepper.setSpeed(RADIUS_RPMS * RADIUS_STEP_MULTIPLIER);
+  azimuthStepper.setSpeed(AZIMUTH_RPMS * AZIMUTH_STEP_MULTIPLIER);
   plotter.onStep(performStep);
-
-#if USE_CLOUD > 0
-  if (!ECCX08.begin()) {
-    condOut.lcdPrint("No ECCX08");
-    condOut.println("No ECCX08 present!");
-    while (true)
-      ;
-  }
-
-  // Set a callback to get the current time
-  // used to validate the servers certificate
-  ArduinoBearSSL.onGetTime(getTime);
-
-  // Set the ECCX08 slot to use for the private key
-  // and the accompanying public certificate for it
-  sslClient.setEccSlot(0, certificate);
-
-  // Optional, set the client id used for MQTT,
-  // each device that is connected to the broker
-  // must have a unique client id. The MQTTClient will generate
-  // a client id for you based on the millis() value if not set
-  //
-  mqttClient.setId(deviceName);
-
-  // Set the message callback, this function is
-  // called when the MQTTClient receives a message
-  mqttClient.onMessage(onMessageReceived);
-#endif
 
   condOut.println("Finished Setup");
   condOut.lcdPrint("FINISHED SETUP", "");
 }
 
 void loop() {
+  handleSerialInput();
   controller.performCycle();
+
+#if USE_CLOUD > 0
+  if (controller.needsCommands()) getCommands();
+#endif
 }
 
-bool pollMqtt(String topics[]) {
+void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
   unsigned long curTime = millis();
-  // Look for updates from the cloud only every half second
-  if ((curTime - lastCloudCheck) > 500) {
-#if USE_CLOUD > 0
-    if (WiFi.status() == WL_CONNECTED || tryConnectWiFi()) {
-      if (mqttClient.connected() || tryConnectMQTT(topics)) {
-        // poll for new MQTT messages and send keep alives
-        mqttClient.poll();
-
-        lastCloudCheck = millis();
-        return true;
-      }
-    }
-
-    lastCloudCheck = millis();
-#else
-    lastCloudCheck = millis();
-    return true;
-#endif
+  long delayMillis = MINIMUM_STEP_DELAY_MILLIS - (curTime - lastStepTimeMillis);
+  if (!fastStep && delayMillis > 0) {
+    unsigned long timeToDelay = (unsigned long)delayMillis;
+    delay(timeToDelay);
   }
 
-  return false;
+  lastStepTimeMillis = millis();
+  radiusStepper.step(radiusSteps * RADIUS_STEP_MULTIPLIER);
+  azimuthStepper.step(azimuthSteps * AZIMUTH_STEP_MULTIPLIER);
 }
 
-void performStep(const Step& step) {
-  Serial.println("Entered step");
-  // String cmd = "Stepping RADIUS=";
-  // int radiusStep = step.getRadiusStep();
-  // int azimuthStep = step.getAzimuthStep();
-  // condOut.println(cmd + radiusStep + ", AZIMUTH=" + azimuthStep);
-//  radiusStepper.step(radiusSteps);
-//  azimuthStepper.step(azimuthSteps);
-}
+void handleSerialInput() {
+  if (Serial && Serial.available()) {
+    String command = Serial.readStringUntil('\n');
 
-void publishMessage(const String& topic, const JSONVar& payload) {
-  const String message = JSON.stringify(payload);
-  condOut.print("Publishing message: TOPIC=" + topic);
-  condOut.println(", MESSAGE=" + message);
-
-#if USE_CLOUD > 0
-  // send message, the Print interface can be used to set the message contents
-  mqttClient.beginMessage(topic);
-  mqttClient.print(message);
-  mqttClient.endMessage();
-#endif
-
-  unsigned long curTime = millis();
-  String time = "";
-  condOut.lcdPrint("Sent message at", time + curTime);
+    Serial.println("Got: " + command);
+    if (command.startsWith("d") || command.startsWith("D")) {
+      unsigned int debugLevel = (unsigned int)command.substring(1).toInt();
+      plotter.setDebug(debugLevel);
+    } else if (command.startsWith("h") || command.startsWith("H")) {
+      Serial.println(PolarPlotter::getHelpMessage());
+    } else if (command == "w" || command == "W") {
+      condOut.lcdPrint("WIPING", "");
+      condOut.lcdSave();
+      plotter.executeWipe();
+    } else {
+      controller.addCommand(command);
+    }
+  }
 }
 
 #if USE_CLOUD > 0
 unsigned long getTime() {
   // get the current time from the WiFi module
-  return WiFi.getTime();
+  unsigned long wifiTime = WiFi.getTime();
+
+  while (wifiTime == 0) {
+    delay(500);
+    wifiTime = WiFi.getTime();
+  }
+
+  Serial.print("Got wifi time as ");
+  Serial.println(wifiTime);
+}
+
+void getCommands() {
+    if ((WiFi.status() == WL_CONNECTED || tryConnectWiFi()) && tryGetDrawingUpdate()) {
+      condOut.lcdPrintSaved();
+      backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
+    } else {
+      doBackoffDelay();
+    }
+}
+
+void doBackoffDelay() {
+  Serial.print("Waiting ");
+  Serial.print(backoffDelay);
+  Serial.println(" ms for backoff");
+  delay(backoffDelay);
+  backoffDelay *= 2UL;
+  if (backoffDelay > MAX_BACKOFF_DELAY_MILLIS) {
+    backoffDelay = MAX_BACKOFF_DELAY_MILLIS;
+  }
 }
 
 bool tryConnectWiFi() {
@@ -138,6 +126,7 @@ bool tryConnectWiFi() {
   for (int i = 0; i < NETWORK_PROFILE_COUNT; i++) {
     NetworkProfile profile = networkProfiles[i];
     String ssid = profile.getSsid();
+    condOut.lcdPrint("WIFI Connecting", ssid);
     if (WiFi.begin(ssid.c_str(), profile.getPass().c_str()) == WL_CONNECTED) {
       condOut.println("Connected to " + ssid);
       return true;
@@ -145,46 +134,28 @@ bool tryConnectWiFi() {
   }
 
   condOut.println("FAILED");
-  condOut.lcdPrint("No WiFi found", "");
   return false;
 }
 
-bool tryConnectMQTT(String topics[]) {
-  condOut.print("Attempting to MQTT broker: ");
-  condOut.print(broker);
-  condOut.print(" - ");
+bool tryGetDrawingUpdate() {
+  drawingUpdateAttempt++;
+  String attempt = "ATTEMPT: ";
+  condOut.println("Attempting to get drawing update");
+  condOut.lcdPrint("Updating Drawing", attempt + drawingUpdateAttempt);
 
-  if (mqttClient.connect(broker, 8883)) {
-    condOut.println("Connected");
+  if (!drawings.tryGetNewDrawing()) return false;
 
-    // subscribe to a topic
-    for (int i = 0; i < TOPIC_SUBSCRIPTION_COUNT; i++) {
-      String topic = topics[i];
-      condOut.println("Subscribing to " + topic);
+  String drawing = drawings.getDrawing();
+  int commandCount = drawings.getCommandCount();
 
-      mqttClient.subscribe(topic);
-    }
+  condOut.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
+  controller.newDrawing(drawing);
 
-    return true;
+  for (int i = 0; i < commandCount; i++) {
+    String command = drawings.getCommand(i);
+    controller.addCommand(command);
   }
 
-  condOut.println("FAILED");
-  condOut.lcdPrint("No MQTT", "");
-  return false;
-}
-
-void onMessageReceived(int messageSize) {
-  // we received a message, print out the topic and contents
-  const String topic = mqttClient.messageTopic();
-
-  // use the Stream interface to print the contents
-  char bytes[messageSize]{};
-  mqttClient.readBytes(bytes, messageSize);
-
-  const String message = bytes;
-  const String blank = "";
-  condOut.println("Received message: TOPIC=" + topic + ", MESSAGE=" + message);
-  condOut.lcdPrint("Received message", blank + messageSize);
-  controller.messageReceived(topic, message);
+  return true;
 }
 #endif
