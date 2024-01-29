@@ -20,8 +20,14 @@ WiFiClient wifiClient;
 HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
 DrawingClient drawings(httpClient, drawingsFile, drawingPathPrefix);
 #endif
-
+#if USE_BLE > 0
+BLEService bleService(BLE_SERVICE_UUID);
+BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STATUS_SIZE);
+SafeStatus status(bleService);
+#else
 SafeStatus status;
+#endif
+
 SafePrinter printer;
 
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
@@ -34,9 +40,25 @@ unsigned long drawingUpdateAttempt = 0;
 unsigned long lastStepTimeMillis = 0;
 
 void setup() {
-  status.init();
   printer.init();
   delay(2000);
+
+#if USE_BLE > 0
+  int bleBegin = BLE.begin();
+  if (!bleBegin) {
+    if (Serial) {
+      Serial.print("Starting Bluetooth® Low Energy failed!");
+      Serial.println(bleBegin);
+    }
+    while (!bleBegin)
+      ;
+  }
+  // set advertised local name and service UUID:
+  BLE.setLocalName(BLE_DEVICE_NAME);
+  BLE.setAdvertisedService(bleService);
+#endif
+
+  status.init();
 
   printer.println("Starting Setup");
   status.status("START SETUP");
@@ -45,12 +67,31 @@ void setup() {
   azimuthStepper.setSpeed(AZIMUTH_RPMS * AZIMUTH_STEP_MULTIPLIER);
   plotter.onStep(performStep);
 
+  if (DEFAULT_DEBUG_LEVEL > 0) {
+    plotter.setDebug(DEFAULT_DEBUG_LEVEL);
+  }
+
+#if USE_BLE > 0
+  bleService.addCharacteristic(bleCommand);
+  BLE.addService(bleService);
+  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
+  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+  bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
+  bleCommand.setValue("");
+  // start advertising
+  BLE.advertise();
+  if (Serial) Serial.println("BLE waiting for connections");
+#endif
+
   printer.println("Finished Setup");
   status.status("FINISHED SETUP");
 }
 
 void loop() {
   handleSerialInput();
+#if USE_BLE > 0
+  BLE.poll();
+#endif
   controller.performCycle();
 
 #if USE_CLOUD > 0
@@ -73,23 +114,50 @@ void performStep(const int radiusSteps, const int azimuthSteps, const bool fastS
 
 void handleSerialInput() {
   if (Serial && Serial.available()) {
-    String command = Serial.readStringUntil('\n');
-
-    Serial.println("Got: " + command);
-    if (command.startsWith("d") || command.startsWith("D")) {
-      unsigned int debugLevel = (unsigned int)command.substring(1).toInt();
-      plotter.setDebug(debugLevel);
-    } else if (command.startsWith("h") || command.startsWith("H")) {
-      Serial.println(PolarPlotter::getHelpMessage());
-    } else if (command == "w" || command == "W") {
-      status.status("WIPING");
-      status.save();
-      plotter.executeWipe();
-    } else {
-      controller.addCommand(command);
-    }
+    handleInput(Serial.readStringUntil('\n'));
   }
 }
+
+void handleInput(const String &input) {
+  String command = input;
+  if (Serial) Serial.println("Got: " + command);
+  if (command.startsWith("d") || command.startsWith("D")) {
+    unsigned int debugLevel = (unsigned int)command.substring(1).toInt();
+    plotter.setDebug(debugLevel);
+  } else if (command.startsWith("h") || command.startsWith("H")) {
+    if (Serial) Serial.println(PolarPlotter::getHelpMessage());
+  } else if (command == "w" || command == "W") {
+    status.status("WIPING");
+    status.save();
+    plotter.executeWipe();
+  } else {
+    controller.addCommand(command);
+  }
+}
+
+#if USE_BLE > 0
+void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
+  String command = bleCommand.value();
+  if (Serial) Serial.println("Got new command from BLE: " + command);
+  handleInput(command);
+}
+
+void blePeripheralConnectHandler(BLEDevice central) {
+  if (!Serial) return;
+
+  // central connected event handler
+  Serial.print("Connected event, central: ");
+  Serial.println(central.address());
+}
+
+void blePeripheralDisconnectHandler(BLEDevice central) {
+  if (!Serial) return;
+
+  // central disconnected event handler
+  Serial.print("Disconnected event, central: ");
+  Serial.println(central.address());
+}
+#endif
 
 #if USE_CLOUD > 0
 unsigned long getTime() {
@@ -101,8 +169,10 @@ unsigned long getTime() {
     wifiTime = WiFi.getTime();
   }
 
-  Serial.print("Got wifi time as ");
-  Serial.println(wifiTime);
+  if (Serial) {
+    Serial.print("Got wifi time as ");
+    Serial.println(wifiTime);
+  }
 }
 
 void getCommands() {
@@ -118,9 +188,11 @@ void getCommands() {
 }
 
 void doBackoffDelay() {
-  Serial.print("Waiting ");
-  Serial.print(backoffDelay);
-  Serial.println(" ms for backoff");
+  if (Serial) {
+    Serial.print("Waiting ");
+    Serial.print(backoffDelay);
+    Serial.println(" ms for backoff");
+  }
   delay(backoffDelay);
   backoffDelay *= 2UL;
   if (backoffDelay > MAX_BACKOFF_DELAY_MILLIS) {

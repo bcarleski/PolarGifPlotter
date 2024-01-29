@@ -2,8 +2,16 @@
 #define _POLAR_PLOTTER_CONSTANTS_
 
 #define USE_LCD 0
+#define USE_BLE 1
 #define USE_CLOUD 1
 
+#define BLE_DEVICE_NAME "Dynamic_Sand_Arduino"
+#define BLE_SERVICE_UUID "45aa5c8f-c47e-42f6-af4a-66544b8aff17"
+#define BLE_STATUS_UUID "52eb19a4-6421-4910-a8ca-7ff75ef2f56b"
+#define BLE_COMMAND_UUID "66af95bc-3dd1-4343-b4b5-ad328b33fda7"
+#define BLE_STATUS_SIZE 512
+
+#define DEFAULT_DEBUG_LEVEL 0
 #define DRAWINGS_FILE "/drawings.json"
 #define DRAWING_PATH_PREFIX "/drawings/"
 
