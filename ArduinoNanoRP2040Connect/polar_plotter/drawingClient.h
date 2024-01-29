@@ -1,5 +1,6 @@
 #include <ArduinoHttpClient.h>
 #include <Arduino_JSON.h>
+#define MAX_COMMANDS 2048
 
 class DrawingClient {
 private:
@@ -7,7 +8,8 @@ private:
   const String& drawingsFile;
   const String& drawingPathPrefix;
   String drawing;
-  JSONVar commandList;
+  String commands[MAX_COMMANDS];
+  int commandCount;
 
   bool findNewDrawing();
   bool retrieveDrawing();

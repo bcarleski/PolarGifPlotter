@@ -14,11 +14,16 @@ String DrawingClient::getDrawing() {
 }
 
 int DrawingClient::getCommandCount() {
-  return this->commandList.length();
+  return this->commandCount;
 }
 
 String DrawingClient::getCommand(int index) {
-  return this->commandList[index];
+  if (index < 0 || index >= this->commandCount) {
+    String empty = "";
+    return empty;
+  }
+
+  return this->commands[index];
 }
 
 bool DrawingClient::findNewDrawing() {
@@ -81,7 +86,13 @@ bool DrawingClient::retrieveDrawing() {
     return false;
   }
 
-  this->commandList = json["commands"];
+  JSONVar commandList = json["commands"];
+  int cmdCount = commandList.length() > MAX_COMMANDS ? MAX_COMMANDS : commandList.length();
+  this->commandCount = cmdCount;
+  for (int i = 0; i < cmdCount; i++) {
+    String command = commandList[i];
+    this->commands[i] = command;
+  }
 
-  return this->commandList.length() > 0;
+  return this->commandCount > 0;
 }

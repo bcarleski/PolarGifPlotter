@@ -1,7 +1,7 @@
 #ifndef _POLAR_PLOTTER_CONSTANTS_
 #define _POLAR_PLOTTER_CONSTANTS_
 
-#define USE_LCD 0
+#define USE_LCD 1
 #define USE_BLE 1
 #define USE_CLOUD 1
 

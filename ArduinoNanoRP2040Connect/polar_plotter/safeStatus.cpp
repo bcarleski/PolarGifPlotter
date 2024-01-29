@@ -19,6 +19,8 @@ SafeStatus::SafeStatus(
   bleStatus(BLEStringCharacteristic(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STATUS_SIZE))
 #endif
 {
+  this->lastKey = "";
+  this->lastValue = "";
 }
 
 void SafeStatus::init() {
