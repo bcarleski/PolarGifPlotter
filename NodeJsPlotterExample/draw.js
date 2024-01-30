@@ -3,23 +3,35 @@ const fs = require("fs");
 const GIFEncoder = require("gifencoder");
 
 const CSV_FILE_PATH = './serial.log';
-const width = 1200;
-const height = 1200;
-const polarOriginX = width / 2;
-const polarOriginY = height / 2;
-const enableGif = true;
+const enableGif = false;
 const enablePng = true;
-const marbleSize = 8;
-const radiusStepSize = 1;
-const azimuthStepSize = -1 * Math.PI / 100.0;
-const stepsCsv = fs.readFileSync(CSV_FILE_PATH);
-const steps = stepsCsv.toString("utf-8")
-                      .split('\n')
-                      .filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('STEP: '))
+
+const csvLines = fs.readFileSync(CSV_FILE_PATH).toString("utf-8").split('\n');
+const steps = csvLines.filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('STEP: '))
                       .map(line => {
                           const parts = line.substring(6).split(',');
                           return {radiusStep:parseInt(parts[0]),azimuthStep:parseInt(parts[1])};
                       });
+
+let width = 1200;
+let height = 1200;
+let radiusStepSize = 1;
+let azimuthStepSize = -1 * Math.PI / 100.0;
+let marbleSizeInRadiusSteps = 20;
+csvLines.filter(line => line.startsWith("Initializing "))
+        .forEach(line => {
+            const parts = /Initializing ([A-Z_]+): ([+-]?[0-9]+(.[0-9]+)?)/.exec(line);
+            if (!parts || parts.length < 3) return;
+
+            if (parts[1] === 'MAX_RADIUS') width = height = parseInt(parts[2]) * 2;
+            if (parts[1] === 'RADIUS_STEP_SIZE') radiusStepSize = parseFloat(parts[2]);
+            if (parts[1] === 'AZIMUTH_STEP_SIZE') azimuthStepSize = parseFloat(parts[2]);
+            if (parts[1] === 'MARBLE_SIZE_IN_RADIUS_STEPS') marbleSizeInRadiusSteps = parseInt(parts[2]);
+        });
+
+const marbleSize = marbleSizeInRadiusSteps * radiusStepSize;
+const polarOriginX = width / 2;
+const polarOriginY = height / 2;
 const batchSize = steps.length > 20 ? Math.floor(steps.length / 20) : 1;
 const batchAccumulator = [];
 const batches = [];
