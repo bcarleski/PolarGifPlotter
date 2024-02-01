@@ -5,6 +5,7 @@ const GIFEncoder = require("gifencoder");
 const CSV_FILE_PATH = './serial.log';
 const enableGif = false;
 const enablePng = true;
+const showLineDebug = false;
 
 const csvLines = fs.readFileSync(CSV_FILE_PATH).toString("utf-8").split('\n');
 const steps = csvLines.filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('STEP: '))
@@ -16,7 +17,7 @@ const steps = csvLines.filter(line => line.length > 0 && line.indexOf(',') > 0 &
 let width = 1200;
 let height = 1200;
 let radiusStepSize = 1;
-let azimuthStepSize = -1 * Math.PI / 100.0;
+let azimuthStepSize = Math.PI / 100.0;
 let marbleSizeInRadiusSteps = 20;
 csvLines.filter(line => line.startsWith("Initializing "))
         .forEach(line => {
@@ -32,7 +33,8 @@ csvLines.filter(line => line.startsWith("Initializing "))
 const marbleSize = marbleSizeInRadiusSteps * radiusStepSize;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
-const batchSize = steps.length > 20 ? Math.floor(steps.length / 20) : 1;
+const minimumNumberOfBatchesForLargeDrawing = 40;
+const batchSize = steps.length > minimumNumberOfBatchesForLargeDrawing ? Math.floor(steps.length / minimumNumberOfBatchesForLargeDrawing) : 1;
 const batchAccumulator = [];
 const batches = [];
 steps.forEach(step => {
@@ -69,7 +71,7 @@ if (enableGif) {
 }
 
 if (enablePng) {
-    const finalImage = getImage(batches.length - 1, false)[0];
+    const finalImage = getImage(batches.length - 1, showLineDebug)[0];
     const imageBuffer = finalImage.toBuffer("image/png");
     fs.writeFileSync("./image.png", imageBuffer);
     console.log("Write final image to image.png");
@@ -97,7 +99,7 @@ function getImage(maxBatch, debugLines) {
             }
 
             if (step.azimuthStep != 0) {
-                const azimuthDelta = azimuthStepSize * step.azimuthStep;
+                const azimuthDelta = -1 * azimuthStepSize * step.azimuthStep;
                 context.rotate(azimuthDelta);
                 context.beginPath();
                 context.arc(0, 0, Math.abs(radius), 0, -1 * azimuthDelta, azimuthDelta > 0);

@@ -32,8 +32,7 @@ SafePrinter printer;
 
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
-PolarPlotter plotter(printer, status, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE, MARBLE_SIZE_IN_RADIUS_STEPS);
-PlotterController controller(printer, status, plotter);
+PlotterController plotter(printer, status, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE, MARBLE_SIZE_IN_RADIUS_STEPS);
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
@@ -68,7 +67,8 @@ void setup() {
   plotter.onStep(performStep);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
-    plotter.setDebug(DEFAULT_DEBUG_LEVEL);
+    String cmd = "D";
+    plotter.addCommand(cmd + DEFAULT_DEBUG_LEVEL);
   }
 
 #if USE_BLE > 0
@@ -92,11 +92,13 @@ void loop() {
 #if USE_BLE > 0
   BLE.poll();
 #endif
-  controller.performCycle();
-
+  if (plotter.canCycle()) {
+    plotter.performCycle();
 #if USE_CLOUD > 0
-  if (controller.needsCommands()) getCommands();
+  } else {
+    getCommands();
 #endif
+  }
 }
 
 void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
@@ -114,24 +116,8 @@ void performStep(const int radiusSteps, const int azimuthSteps, const bool fastS
 
 void handleSerialInput() {
   if (Serial && Serial.available()) {
-    handleInput(Serial.readStringUntil('\n'));
-  }
-}
-
-void handleInput(const String &input) {
-  String command = input;
-  if (Serial) Serial.println("Got: " + command);
-  if (command.startsWith("d") || command.startsWith("D")) {
-    unsigned int debugLevel = (unsigned int)command.substring(1).toInt();
-    plotter.setDebug(debugLevel);
-  } else if (command.startsWith("h") || command.startsWith("H")) {
-    if (Serial) Serial.println(PolarPlotter::getHelpMessage());
-  } else if (command == "w" || command == "W") {
-    status.status("WIPING");
-    status.save();
-    plotter.executeWipe();
-  } else {
-    controller.addCommand(command);
+    String command = Serial.readStringUntil('\n');
+    plotter.addCommand(command);
   }
 }
 
@@ -139,7 +125,7 @@ void handleInput(const String &input) {
 void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
   String command = bleCommand.value();
   if (Serial) Serial.println("Got new command from BLE: " + command);
-  handleInput(command);
+  plotter.addCommand(command);
 }
 
 void blePeripheralConnectHandler(BLEDevice central) {
@@ -229,11 +215,11 @@ bool tryGetDrawingUpdate() {
   int commandCount = drawings.getCommandCount();
 
   printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
-  controller.newDrawing(drawing);
+  plotter.newDrawing(drawing);
 
   for (int i = 0; i < commandCount; i++) {
     String command = drawings.getCommand(i);
-    controller.addCommand(command);
+    plotter.addCommand(command);
   }
 
   return true;
