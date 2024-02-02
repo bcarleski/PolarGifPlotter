@@ -31,6 +31,8 @@ csvLines.filter(line => line.startsWith("Initializing "))
         });
 
 const marbleSize = marbleSizeInRadiusSteps * radiusStepSize;
+width += marbleSize;
+height += marbleSize;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
 const minimumNumberOfBatchesForLargeDrawing = 40;
