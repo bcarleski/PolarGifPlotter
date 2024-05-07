@@ -1,0 +1,34 @@
+
+Globally Valid Properties:
+    maxRadius - float
+    radiusStepSize - float
+    azimuthStepSize - float
+    marbleSizeInRadiusSteps - int
+    currentDrawing - String
+    currentStep - String
+    position - String
+    state - String
+
+States
+    Initializing
+    Calibrating
+    Wiping
+    Retrieving
+    Drawing
+
+Commands
+    When in Wiping/Retrieving/Drawing
+        Pause/Resume
+        Wipe
+        Test Drawing 1/2/3/n
+        Calibrate
+
+    When in Calibration
+        Phase 1/2 (Setting Center/Outer Edge)
+            Push In
+            Push Out
+            Accept
+        Phase 3 (Setting Full Circle)
+            Rotate More
+            Rotate Less
+            Accept

@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Deploy ProvideDrawingUpdate Lambda
+name: Deploy Mobile Controller Website
 
 # Controls when the action will run. 
 on:
@@ -26,26 +26,22 @@ jobs:
         id: changed-files
         uses: tj-actions/changed-files@v44
         with:
-          files: lambda/ProvideDrawingUpdate/**
+          files: mobileAppWebsite/polar-plotter-mobile-controller/**
 
-      - name: Setup SAM
+      - name: Setup Node.JS
         if: steps.changed-files.outputs.any_changed == 'true'
-        uses: aws-actions/setup-sam@v1
-
-      - name: Configure AWS Credentials
-        if: steps.changed-files.outputs.any_changed == 'true'
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-west-2
+        uses: actions/setup-node@v4
 
       - name: Build Package
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: sam build --use-container
-        working-directory: ./lambda/ProvideDrawingUpdate/
+        run: npm run build
+        working-directory: ./mobileAppWebsite/polar-plotter-mobile-controller/
 
-      - name: Deploy Package
+      - uses: shallwefootball/s3-upload-action@master
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: sam deploy --no-confirm-changeset --no-fail-on-empty-changeset --stack-name sam-mark-chore-complete --s3-bucket chores-data-sam-deploy-bucket --capabilities CAPABILITY_IAM --region us-west-2
-        working-directory: ./lambda/ProvideDrawingUpdate/
+        with:
+          aws_key_id: ${{ secrets.AWS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
+          aws_bucket: dynamic-sand-controller
+          source_dir: 'mobileAppWebsite/polar-plotter-mobile-controller/dist'
+          destination_dir: ''
