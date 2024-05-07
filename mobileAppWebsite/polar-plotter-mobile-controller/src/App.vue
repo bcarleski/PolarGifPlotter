@@ -52,13 +52,6 @@ async function sendCommand(cmd: string) {
   </div>
   <div v-else>
     <div v-if="data.device">
-      <header><h1>Select a Device</h1></header>
-      <main>
-        <h2>Click the button below to choose the device</h2>
-        <button @click="requestDevice">Select Device</button>
-      </main>
-    </div>
-    <div v-else>
       <header><h1>{{ deviceProperties.state }}</h1></header>
 
       <main>
@@ -80,6 +73,13 @@ async function sendCommand(cmd: string) {
         <div v-else>
           <UnknownState />
         </div>
+      </main>
+    </div>
+    <div v-else>
+      <header><h1>Select a Device</h1></header>
+      <main>
+        <h2>Click the button below to choose the device</h2>
+        <button @click="requestDevice">Select Device</button>
       </main>
     </div>
   </div>
