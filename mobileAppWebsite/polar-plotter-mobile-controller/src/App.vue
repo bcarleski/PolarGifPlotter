@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, shallowRef } from 'vue';
 import CalibrationPhase1 from './components/CalibrationPhase1.vue'
 import CalibrationPhase2 from './components/CalibrationPhase2.vue'
 import CalibrationPhase3 from './components/CalibrationPhase3.vue'
@@ -18,8 +18,8 @@ const deviceProperties = reactive({
 })
 
 const data = reactive({
-  device: null,
-  supported: navigator && navigator.bluetooth && navigator.bluetooth.requestDevice
+  device: shallowRef<undefined | BluetoothDevice>(undefined),
+  supported: navigator && 'bluetooth' in navigator
 })
 
 const isWorkingState = computed(() => {
@@ -27,9 +27,13 @@ const isWorkingState = computed(() => {
 })
 
 async function requestDevice() {
-  data.device = await navigator.bluetooth.requestDevice({
-    filters: ['45aa5c8f-c47e-42f6-af4a-66544b8aff17', 'Dynamic_Sand_Arduino']
-  })
+  try {
+    data.device = await navigator.bluetooth.requestDevice({
+      filters: [{ name: 'Dynamic_Sand_Arduino', services: ['45aa5c8f-c47e-42f6-af4a-66544b8aff17']}]
+    })
+  } catch (err) {
+    console.log('Error: ' + err)
+  }
 }
 </script>
 
