@@ -1,7 +1,9 @@
 <script setup lang="ts">
-  defineProps<{
-    state: string
+  defineProps<{ state: string }>()
+  const emit = defineEmits<{
+    (e:'sendCommand', command: string): void
   }>()
+
   const pause = function() {
     
   }
@@ -9,7 +11,7 @@
     
   }
   const wipe = function() {
-    
+    emit('sendCommand', 'W')
   }
   const testDrawing1 = function() {
     

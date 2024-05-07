@@ -45,7 +45,7 @@ jobs:
       - uses: shallwefootball/s3-upload-action@master
         if: steps.changed-files.outputs.any_changed == 'true'
         with:
-          aws_key_id: ${{ secrets.AWS_KEY_ID }}
+          aws_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
           aws_bucket: dynamic-sand-controller
           source_dir: 'mobileAppWebsite/polar-plotter-mobile-controller/dist'

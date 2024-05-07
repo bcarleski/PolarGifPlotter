@@ -35,6 +35,14 @@ async function requestDevice() {
     console.log('Error: ' + err)
   }
 }
+
+async function sendCommand(cmd: string) {
+  try {
+    console.log('Sending command: ' + cmd)
+  } catch (err) {
+    console.log('Error: ' + err)
+  }
+}
 </script>
 
 <template>
@@ -55,7 +63,7 @@ async function requestDevice() {
 
       <main>
         <div v-if="isWorkingState">
-          <WorkingState :state="deviceProperties.state" />
+          <WorkingState :state="deviceProperties.state" @send-command="sendCommand" />
         </div>
         <div v-else-if="deviceProperties.state === 'Initializing'">
           <InitializingState />
