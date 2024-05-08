@@ -1,6 +1,8 @@
 #include "secrets.h"
 #include "constants.h"
 
+#include <kvstore_global_api.h>
+#include <mbed_error.h>
 #include <PolarPlotterCore.h>
 #include "safePrinter.h"
 #include "safeStatus.h"
@@ -28,19 +30,35 @@ SafeStatus status(bleService);
 SafeStatus status;
 #endif
 
+const double azimuthStepsForOneTableRotation = AZIMUTH_STEPPER_STEPS_PER_ROTATION * AZIMUTH_GEAR_RATIO;
+const double radiusStepsForOneDriveGearRotation = RADIUS_STEPPER_STEPS_PER_ROTATION * RADIUS_GEAR_RATIO;
+const double radiusStepsToAzimuthStep = -1.0 * radiusStepsForOneDriveGearRotation / azimuthStepsForOneTableRotation;
+double radiusStepOffsetFromAzimuth = 0.0;
+double radiusStepSize;
+double azimuthStepSize;
+const char* radiusStepSizeKey = "DynamicSand.RadiusStepSize";
+const char* azimuthStepSizeKey = "DynamicSand.AzimuthStepSize";
 SafePrinter printer;
 
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
-PlotterController plotter(printer, status, MAX_RADIUS, RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE, MARBLE_SIZE_IN_RADIUS_STEPS);
+PlotterController plotter(printer, status, MAX_RADIUS, MARBLE_SIZE_IN_RADIUS_STEPS);
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
-unsigned long lastStepTimeMillis = 0;
+unsigned long waitingEndsAt = 0;
+enum LoopState {
+  CYCLING,
+  WAITING_WIFI,
+  WAITING_STEP
+};
+LoopState loopState;
 
 void setup() {
   printer.init();
   delay(2000);
+  loopState = CYCLING;
+
 
 #if USE_BLE > 0
   int bleBegin = BLE.begin();
@@ -65,10 +83,21 @@ void setup() {
   radiusStepper.setSpeed(RADIUS_RPMS * RADIUS_STEP_MULTIPLIER);
   azimuthStepper.setSpeed(AZIMUTH_RPMS * AZIMUTH_STEP_MULTIPLIER);
   plotter.onStep(performStep);
+  plotter.onRecalibrate(performRecalibrate);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
     String cmd = "D";
     plotter.addCommand(cmd + DEFAULT_DEBUG_LEVEL);
+  }
+
+  bool radiusLoaded = loadSavedDouble(radiusStepSizeKey, &radiusStepSize);
+  bool azimuthLoaded = loadSavedDouble(azimuthStepSizeKey, &azimuthStepSize);
+
+  if (radiusLoaded && azimuthLoaded) {
+    plotter.calibrate(RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE);
+  } else {
+    String cmd = "C";  // Start calibration
+    plotter.addCommand(cmd);
   }
 
 #if USE_BLE > 0
@@ -92,6 +121,11 @@ void loop() {
 #if USE_BLE > 0
   BLE.poll();
 #endif
+  if (loopState == WAITING_STEP) {
+    if (millis() < waitingEndsAt) return;
+    loopState = CYCLING;
+  }
+
   if (plotter.canCycle()) {
     plotter.performCycle();
 #if USE_CLOUD > 0
@@ -101,17 +135,65 @@ void loop() {
   }
 }
 
-void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
-  unsigned long curTime = millis();
-  long delayMillis = MINIMUM_STEP_DELAY_MILLIS - (curTime - lastStepTimeMillis);
-  if (!fastStep && delayMillis > 0) {
-    unsigned long timeToDelay = (unsigned long)delayMillis;
-    delay(timeToDelay);
+bool saveDouble(const char* stringKey, double value) {
+  String val(value, 6);
+  int result = kv_set(stringKey,  val.c_str(), val.length() + 1, 0);
+  return result == MBED_SUCCESS;
+}
+
+bool loadSavedDouble(const char* stringKey, double* value) {
+  kv_info_t infoBuffer;
+  int result = kv_get_info(stringKey, &infoBuffer);
+
+  if (result = MBED_SUCCESS) {
+    char *readBuffer = new char[infoBuffer.size];
+    size_t actualSize;
+    memset(readBuffer, 0, infoBuffer.size);
+    result = kv_get(stringKey, readBuffer, infoBuffer.size, &actualSize);
+
+    if (result == MBED_SUCCESS) {
+      String str(readBuffer, actualSize);
+      *value = str.toDouble();
+      return true;
+    }
+
+    delete[] readBuffer;
   }
 
-  lastStepTimeMillis = millis();
-  radiusStepper.step(radiusSteps * RADIUS_STEP_MULTIPLIER);
+  return false;
+}
+
+void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
+  // Because of how my arm is configured, an azimuth step results in a slight radius step
+  // that we need to offset and account for
+  int rSteps = radiusSteps;
+  if (azimuthSteps != 0) {
+    double radiusStepOffset = radiusStepOffsetFromAzimuth - radiusStepsToAzimuthStep * azimuthSteps;
+    int steps = round(radiusStepOffset);
+
+    if (steps != 0) {
+      radiusStepOffsetFromAzimuth += radiusStepOffset - steps;
+      rSteps += steps;
+    }
+  }
+
+  if (!fastStep) {
+    waitingEndsAt = millis() + MINIMUM_STEP_DELAY_MILLIS;
+    loopState = WAITING_STEP;
+  }
+
+  radiusStepper.step(rSteps * RADIUS_STEP_MULTIPLIER);
   azimuthStepper.step(azimuthSteps * AZIMUTH_STEP_MULTIPLIER);
+}
+
+void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSteps) {
+  const double maxRadius = MAX_RADIUS;
+  radiusStepSize = maxRadius / maxRadiusSteps;
+  azimuthStepSize = (2 * PI) / fullCircleAzimuthSteps;
+
+  plotter.calibrate(radiusStepSize, azimuthStepSize);
+  saveDouble(radiusStepSizeKey, radiusStepSize);
+  saveDouble(azimuthStepSizeKey, azimuthStepSize);
 }
 
 void handleSerialInput() {
@@ -146,22 +228,12 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
 #endif
 
 #if USE_CLOUD > 0
-unsigned long getTime() {
-  // get the current time from the WiFi module
-  unsigned long wifiTime = WiFi.getTime();
-
-  while (wifiTime == 0) {
-    delay(500);
-    wifiTime = WiFi.getTime();
-  }
-
-  if (Serial) {
-    Serial.print("Got wifi time as ");
-    Serial.println(wifiTime);
-  }
-}
-
 void getCommands() {
+  if (loopState == WAITING_WIFI) {
+    if (millis() < waitingEndsAt) return;
+    loopState = CYCLING;
+  }
+
   if (backoffDelay == INITIAL_BACKOFF_DELAY_MILLIS) {
     status.save();
   }
@@ -174,12 +246,14 @@ void getCommands() {
 }
 
 void doBackoffDelay() {
+  waitingEndsAt = millis() + backoffDelay;
+  loopState = WAITING_WIFI;
+
   if (Serial) {
     Serial.print("Waiting ");
     Serial.print(backoffDelay);
     Serial.println(" ms for backoff");
   }
-  delay(backoffDelay);
   backoffDelay *= 2UL;
   if (backoffDelay > MAX_BACKOFF_DELAY_MILLIS) {
     backoffDelay = MAX_BACKOFF_DELAY_MILLIS;

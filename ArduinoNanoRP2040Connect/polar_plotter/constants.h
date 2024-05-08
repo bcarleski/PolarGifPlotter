@@ -25,7 +25,7 @@
 #define RADIUS_STEPPER_STEPS_PER_ROTATION 1600
 #define RADIUS_STEPPER_STEP_PIN 15
 #define RADIUS_STEPPER_DIR_PIN 16
-#define RADIUS_GEAR_RATIO 1.0                  // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
+#define RADIUS_GEAR_RATIO 3.0                  // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
 #define RADIUS_ROTATIONS_TO_MAX_RADIUS 1.0     // the number of complete turns of the drive gear that it takes to go from the center to the maximum radius
 #define RADIUS_RPMS 30                         // The maximum speed the Radius motor should ever turn, in RPMs
 #define RADIUS_STEP_MULTIPLIER 4
@@ -33,11 +33,11 @@
 #define AZIMUTH_STEPPER_STEPS_PER_ROTATION 1600
 #define AZIMUTH_STEPPER_STEP_PIN 17
 #define AZIMUTH_STEPPER_DIR_PIN 18
-#define AZIMUTH_GEAR_RATIO 1.0                 // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
+#define AZIMUTH_GEAR_RATIO 3.0                 // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
 #define AZIMUTH_RPMS 30                        // The maximum speed the Azimuth motor should ever turn, in RPMs
 #define AZIMUTH_STEP_MULTIPLIER 4
 
-#define MAX_RADIUS 600
+#define MAX_RADIUS 1000
 #define RADIUS_STEP_SIZE MAX_RADIUS / RADIUS_ROTATIONS_TO_MAX_RADIUS / RADIUS_STEPPER_STEPS_PER_ROTATION / RADIUS_GEAR_RATIO
 #define AZIMUTH_STEP_SIZE 2 * PI / AZIMUTH_STEPPER_STEPS_PER_ROTATION / AZIMUTH_GEAR_RATIO
 
