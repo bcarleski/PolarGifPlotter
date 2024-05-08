@@ -155,7 +155,7 @@ async function sendCommand(cmd: string) {
     <div v-else>
       <header><h1>Select a Device</h1></header>
       <main>
-        <h2>Click the button below to choose the device</h2>
+        <h2>Choose the Polar Plotter device to monitor</h2>
         <button @click="requestDevice">Select Device</button>
       </main>
     </div>
