@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, shallowRef } from 'vue';
-import CalibrationPhase1 from './components/CalibrationPhase1.vue'
-import CalibrationPhase2 from './components/CalibrationPhase2.vue'
-import CalibrationPhase3 from './components/CalibrationPhase3.vue'
+import { computed, reactive, ref, shallowRef } from 'vue';
+import CalibrationPushing from './components/CalibrationPushing.vue'
 import InitializingState from './components/InitializingState.vue'
+import ManualMoving from './components/ManualMoving.vue'
 import UnknownState from './components/UnknownState.vue'
 import WorkingState from './components/WorkingState.vue'
 
 const decoder = new TextDecoder()
-const deviceProperties = reactive({
+const encoder = new TextEncoder()
+const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSize:number, marbleSizeInRadiusSteps:number, currentDrawing:string, currentStep:string, position:string, state:string, status:string, sendCmd:BluetoothRemoteGATTCharacteristic | undefined} = reactive({
   maxRadius: 0,
   radiusStepSize: 0,
   azimuthStepSize: 0,
@@ -16,19 +16,29 @@ const deviceProperties = reactive({
   currentDrawing: 'Unknown',
   currentStep: 'Unknown',
   position: 'Unknown',
-  state: 'Initializing',
-  status: ''
+  state: 'Calibrating Radius',
+  status: '',
+  sendCmd: undefined
 })
 
-const data = reactive({
-  device: shallowRef<undefined | BluetoothDevice>(undefined),
+const data : {device:undefined|BluetoothDevice|{}, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
+  device: undefined,
   supported: navigator && 'bluetooth' in navigator,
+  disabled: false,
   message: '',
   error: ''
 })
 
 const isWorkingState = computed(() => {
-  return deviceProperties.state === 'Wiping' || deviceProperties.state === 'Retrieving' || deviceProperties.state === 'Drawing' || deviceProperties.state === 'Paused'
+  return deviceProperties.state === 'Wiping' || deviceProperties.state === 'Retrieving Commands' || deviceProperties.state === 'Drawing' || deviceProperties.state === 'Paused' || deviceProperties.state === 'Resuming'
+})
+
+const isCalibrationState = computed(() => {
+  return deviceProperties.state && deviceProperties.state.startsWith('Calibrating ')
+})
+
+const isManualState = computed(() => {
+  return deviceProperties.state && deviceProperties.state.startsWith('Manual ')
 })
 
 function clearDevice(evt: Event) {
@@ -91,16 +101,19 @@ async function requestDevice() {
 
     if (svc) {
       data.message += ', got service'
-      monitorProperty(svc, '52eb19a4-6421-4910-a8ca-7ff75ef2f56b', (dv) => deviceProperties.status = dv ? decoder.decode(dv) : '')
-      monitorProperty(svc, 'fb65af7d-494f-4a45-8872-6e6ffbf0703c', (dv) => deviceProperties.maxRadius = dv ? dv.getFloat32(0) : 0)
-      monitorProperty(svc, 'fd18cf65-85d7-4730-ad77-4cc3fabaab99', (dv) => deviceProperties.radiusStepSize = dv ? dv.getInt32(0) : 0)
-      monitorProperty(svc, '4dc9c338-0004-4c05-bd26-bb13e55c3bb9', (dv) => deviceProperties.azimuthStepSize = dv ? dv.getInt32(0) : 0)
-      monitorProperty(svc, '60af168a-b702-4d0b-8c1b-f35c7a436781', (dv) => deviceProperties.marbleSizeInRadiusSteps = dv ? dv.getInt32(0) : 0)
-      monitorProperty(svc, 'fa95bee6-46f9-4898-913a-0575019d3d33', (dv) => deviceProperties.currentDrawing = dv ? decoder.decode(dv) : '')
-      monitorProperty(svc, '54a63a69-90ce-4b14-a103-46152bb1da68', (dv) => deviceProperties.currentStep = dv ? decoder.decode(dv) : '')
-      monitorProperty(svc, '7fcd311a-fafa-47ee-80b8-618616697a59', (dv) => deviceProperties.position = dv ? decoder.decode(dv) : '')
-      monitorProperty(svc, 'ec314ea1-7426-47fb-825c-8fbd8b02f7fe', (dv) => deviceProperties.state = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, 'fb65af7d-494f-4a45-8872-6e6ffbf0703c', (dv) => deviceProperties.maxRadius = dv ? dv.getFloat32(0, true) : 0)
+      await monitorProperty(svc, 'fd18cf65-85d7-4730-ad77-4cc3fabaab99', (dv) => deviceProperties.radiusStepSize = dv ? dv.getFloat32(0, true) : 0)
+      await monitorProperty(svc, '4dc9c338-0004-4c05-bd26-bb13e55c3bb9', (dv) => deviceProperties.azimuthStepSize = dv ? dv.getFloat32(0, true) : 0)
+      await monitorProperty(svc, '60af168a-b702-4d0b-8c1b-f35c7a436781', (dv) => deviceProperties.marbleSizeInRadiusSteps = dv ? dv.getInt32(0, true) : 0)
+      await monitorProperty(svc, 'fa95bee6-46f9-4898-913a-0575019d3d33', (dv) => deviceProperties.currentDrawing = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, '54a63a69-90ce-4b14-a103-46152bb1da68', (dv) => deviceProperties.currentStep = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, '7fcd311a-fafa-47ee-80b8-618616697a59', (dv) => deviceProperties.position = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, 'ec314ea1-7426-47fb-825c-8fbd8b02f7fe', (dv) => deviceProperties.state = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, '52eb19a4-6421-4910-a8ca-7ff75ef2f56b', (dv) => deviceProperties.status = dv ? decoder.decode(dv) : '')
       data.message += ', added monitors'
+
+      deviceProperties.sendCmd = await svc.getCharacteristic('66af95bc-3dd1-4343-b4b5-ad328b33fda7')
+      data.message += deviceProperties.sendCmd ? ', got send command' : ', could not get send command'
     }
   } catch (err) {
     data.error = 'REQUEST ERROR: ' + err
@@ -108,10 +121,20 @@ async function requestDevice() {
 }
 
 async function sendCommand(cmd: string) {
-  data.error = ''
   data.message = ''
+
+  if (!deviceProperties.sendCmd) {
+    data.error = 'Send Command Not Found'
+    return
+  }
+
+  data.error = ''
+  data.disabled = true
+  setTimeout(() => { data.disabled = false; data.message = ''; }, 1000)
+
   try {
-    data.message = 'Sending command: ' + cmd
+    data.message = 'Sending: ' + cmd
+    await deviceProperties.sendCmd.writeValue(encoder.encode(cmd))
   } catch (err) {
     data.error = 'SEND ERROR: ' + err
   }
@@ -132,20 +155,17 @@ async function sendCommand(cmd: string) {
         <div>Step: {{ deviceProperties.currentStep }}</div>
         <div>Position: {{ deviceProperties.position }}</div>
         <div>Status: {{ deviceProperties.status }}</div>
-        <div v-if="isWorkingState">
-          <WorkingState :state="deviceProperties.state" @send-command="sendCommand" />
-        </div>
-        <div v-else-if="deviceProperties.state === 'Initializing'">
+        <div v-if="deviceProperties.state === 'Initializing'">
           <InitializingState />
         </div>
-        <div v-else-if="deviceProperties.state === 'Calibrating Center'">
-          <CalibrationPhase1 />
+        <div v-else-if="isWorkingState">
+          <WorkingState :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
         </div>
-        <div v-else-if="deviceProperties.state === 'Calibrating Edge'">
-          <CalibrationPhase2 />
+        <div v-else-if="isManualState">
+          <ManualMoving :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
         </div>
-        <div v-else-if="deviceProperties.state === 'Calibrating Circle'">
-          <CalibrationPhase3 />
+        <div v-else-if="isCalibrationState">
+          <CalibrationPushing :disabled="data.disabled" @send-command="sendCommand" />
         </div>
         <div v-else>
           <UnknownState />
@@ -172,6 +192,13 @@ async function sendCommand(cmd: string) {
 header {
   line-height: 1.5;
   text-align: center;
+  position: fixed;
+  top: 0;
+  width: 100%;
+  background-color: white;
+}
+main {
+  margin-top: 120px;
 }
 
 .message {

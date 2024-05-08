@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  defineProps<{ disabled: boolean }>()
+  defineProps<{ state: string, disabled: boolean }>()
   const emit = defineEmits<{
     (e:'sendCommand', command: string): void
   }>()
@@ -15,10 +15,11 @@
     <button @click="emit('sendCommand', 'O1000')" :disabled="disabled">&gt;&gt;&gt;</button>
   </div>
   <div>
-    <button @click="emit('sendCommand', 'A')" :disabled="disabled">Accept</button>
+    <button @click="emit('sendCommand', 'A')" v-if="state == 'Manual Radius'" :disabled="disabled">Switch to Azimuth</button>
+    <button @click="emit('sendCommand', 'R')" v-else :disabled="disabled">Switch to Radius</button>
   </div>
   <div>
-    <button @click="emit('sendCommand', '.M')" :disabled="disabled">Manual</button>
+    <button @click="emit('sendCommand', 'X')" :disabled="disabled">Exit Manual</button>
   </div>
 </template>
 
