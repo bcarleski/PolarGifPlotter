@@ -16,7 +16,15 @@ private:
 #endif
 #if USE_BLE > 0
   BLEService& bleService;
+  BLECharacteristic bleMaxRadius;
+  BLECharacteristic bleRadiusStepSize;
+  BLECharacteristic bleAzimuthStepSize;
+  BLECharacteristic bleMarbleSize;
   BLEStringCharacteristic bleStatus;
+  BLEStringCharacteristic bleDrawing;
+  BLEStringCharacteristic bleStep;
+  BLEStringCharacteristic blePosition;
+  BLEStringCharacteristic bleState;
 #endif
   String lastKey;
   String lastValue;
@@ -34,6 +42,14 @@ public:
   void init();
 
   void writeStatus(const String &key, const String &value);
+  void setMaxRadius(const float value);
+  void setRadiusStepSize(const float value);
+  void setAzimuthStepSize(const float value);
+  void setMarbleSizeInRadiusSteps(const int value);
+  void setCurrentDrawing(const String &value);
+  void setCurrentStep(const String &value);
+  void setPosition(const String &value);
+  void setState(const String &value);
 
   void save();
   void restore();

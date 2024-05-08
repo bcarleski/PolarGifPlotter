@@ -16,7 +16,15 @@ SafeStatus::SafeStatus(
 #endif
 #if USE_BLE > 0
   bleService(bleService),
-  bleStatus(BLEStringCharacteristic(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STATUS_SIZE))
+  bleMaxRadius(BLECharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify, 4)),
+  bleRadiusStepSize(BLECharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify, 4)),
+  bleAzimuthStepSize(BLECharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify, 4)),
+  bleMarbleSize(BLECharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify, 4)),
+  bleStatus(BLEStringCharacteristic(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleDrawing(BLEStringCharacteristic(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleStep(BLEStringCharacteristic(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  blePosition(BLEStringCharacteristic(BLE_POSITION_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleState(BLEStringCharacteristic(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING_SIZE))
 #endif
 {
   this->lastKey = "";
@@ -32,7 +40,16 @@ void SafeStatus::init() {
 #endif
 #if USE_BLE > 0
   // add the characteristic to the service
+  bleService.addCharacteristic(bleMaxRadius);
+  bleService.addCharacteristic(bleRadiusStepSize);
+  bleService.addCharacteristic(bleAzimuthStepSize);
+  bleService.addCharacteristic(bleMarbleSize);
   bleService.addCharacteristic(bleStatus);
+  bleService.addCharacteristic(bleDrawing);
+  bleService.addCharacteristic(bleStep);
+  bleService.addCharacteristic(blePosition);
+  bleService.addCharacteristic(bleState);
+  bleState.writeValue("Initializing");
 #endif
 }
 
@@ -49,14 +66,96 @@ void SafeStatus::safeLcdPrint(const String &value) {
 
 void SafeStatus::safeBlePrint(const String &value) {
   String val = value;
-  if (val.length() > BLE_STATUS_SIZE) {
-    val = val.substring(0, BLE_STATUS_SIZE);
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
   }
 
 #if USE_BLE > 0
   bleStatus.writeValue(val);
 #endif
 }
+
+void setFloatValue(BLECharacteristic &characteristic, const float value) {
+  byte arr[4];
+  memcpy(arr, (uint8_t *) &value, 4);
+  characteristic.writeValue(arr, 4);
+}
+
+void setIntValue(BLECharacteristic &characteristic, const int value) {
+  byte arr[4];
+  memcpy(arr, (uint8_t *) &value, 4);
+  characteristic.writeValue(arr, 4);
+}
+
+void SafeStatus::setMaxRadius(const float value) {
+#if USE_BLE > 0
+  setFloatValue(bleMaxRadius, value);
+#endif
+}
+
+void SafeStatus::setRadiusStepSize(const float value) {
+#if USE_BLE > 0
+  setFloatValue(bleRadiusStepSize, value);
+#endif
+}
+
+void SafeStatus::setAzimuthStepSize(const float value) {
+#if USE_BLE > 0
+  setFloatValue(bleAzimuthStepSize, value);
+#endif
+}
+
+void SafeStatus::setMarbleSizeInRadiusSteps(const int value) {
+#if USE_BLE > 0
+  setIntValue(bleMarbleSize, value);
+#endif
+}
+
+void SafeStatus::setCurrentDrawing(const String &value) {
+#if USE_BLE > 0
+  String val = value;
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
+  }
+
+  bleDrawing.writeValue(val);
+#endif
+}
+
+void SafeStatus::setCurrentStep(const String &value) {
+#if USE_BLE > 0
+  String val = value;
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
+  }
+
+  bleStep.writeValue(val);
+#endif
+}
+
+void SafeStatus::setPosition(const String &value) {
+#if USE_BLE > 0
+  String val = value;
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
+  }
+
+  blePosition.writeValue(val);
+#endif
+}
+
+void SafeStatus::setState(const String &value) {
+#if USE_BLE > 0
+  String val = value;
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
+  }
+
+  bleState.writeValue(val);
+#endif
+}
+
+
 
 void SafeStatus::writeStatus(const String &key, const String &value) {
 #if USE_LCD > 0

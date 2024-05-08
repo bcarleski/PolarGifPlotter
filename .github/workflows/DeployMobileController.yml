@@ -17,6 +17,9 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -42,11 +45,13 @@ jobs:
         run: npm run build
         working-directory: ./mobileAppWebsite/polar-plotter-mobile-controller/
 
-      - uses: shallwefootball/s3-upload-action@master
+      - name: Deploy to S3
+        uses: reggionick/s3-deploy@v4
         if: steps.changed-files.outputs.any_changed == 'true'
         with:
-          aws_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY}}
-          aws_bucket: dynamic-sand-controller
-          source_dir: 'mobileAppWebsite/polar-plotter-mobile-controller/dist'
-          destination_dir: ''
+          bucket: ${{ secrets.AWS_S3_BUCKET_NAME }}
+          bucket-region: ${{ secrets.AWS_S3_BUCKET_REGION }}
+          dist-id: ${{ secrets.AWS_CLOUDFRONT_DISTRIBUTION_ID }}
+          invalidation: /index.html
+          folder: 'mobileAppWebsite/polar-plotter-mobile-controller/dist'
+          delete-removed: true

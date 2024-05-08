@@ -24,7 +24,7 @@ DrawingClient drawings(httpClient, drawingsFile, drawingPathPrefix);
 #endif
 #if USE_BLE > 0
 BLEService bleService(BLE_SERVICE_UUID);
-BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STATUS_SIZE);
+BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
 SafeStatus status(bleService);
 #else
 SafeStatus status;
@@ -33,6 +33,8 @@ SafeStatus status;
 const double azimuthStepsForOneTableRotation = AZIMUTH_STEPPER_STEPS_PER_ROTATION * AZIMUTH_GEAR_RATIO;
 const double radiusStepsForOneDriveGearRotation = RADIUS_STEPPER_STEPS_PER_ROTATION * RADIUS_GEAR_RATIO;
 const double radiusStepsToAzimuthStep = -1.0 * radiusStepsForOneDriveGearRotation / azimuthStepsForOneTableRotation;
+const double maxRadius = MAX_RADIUS;
+const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
 double radiusStepOffsetFromAzimuth = 0.0;
 double radiusStepSize;
 double azimuthStepSize;
@@ -42,7 +44,7 @@ SafePrinter printer;
 
 Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
-PlotterController plotter(printer, status, MAX_RADIUS, MARBLE_SIZE_IN_RADIUS_STEPS);
+PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps);
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
@@ -86,7 +88,7 @@ void setup() {
   plotter.onRecalibrate(performRecalibrate);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
-    String cmd = "D";
+    String cmd = ".D";
     plotter.addCommand(cmd + DEFAULT_DEBUG_LEVEL);
   }
 
@@ -96,7 +98,7 @@ void setup() {
   if (radiusLoaded && azimuthLoaded) {
     plotter.calibrate(RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE);
   } else {
-    String cmd = "C";  // Start calibration
+    String cmd = ".C";  // Start calibration
     plotter.addCommand(cmd);
   }
 
@@ -105,6 +107,8 @@ void setup() {
   BLE.addService(bleService);
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
+  status.setMaxRadius(maxRadius);
+  status.setMarbleSizeInRadiusSteps(marbleSizeInRadiusSteps);
   bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
   bleCommand.setValue("");
   // start advertising
