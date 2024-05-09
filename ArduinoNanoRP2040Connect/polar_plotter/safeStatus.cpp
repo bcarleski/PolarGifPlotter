@@ -16,9 +16,9 @@ SafeStatus::SafeStatus(
 #endif
 #if USE_BLE > 0
   bleService(bleService),
-  bleMaxRadius(BLECharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify, 4)),
-  bleRadiusStepSize(BLECharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify, 4)),
-  bleAzimuthStepSize(BLECharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify, 4)),
+  bleMaxRadius(BLECharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify, 8)),
+  bleRadiusStepSize(BLECharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify, 8)),
+  bleAzimuthStepSize(BLECharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify, 8)),
   bleMarbleSize(BLECharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify, 4)),
   bleStatus(BLEStringCharacteristic(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
   bleDrawing(BLEStringCharacteristic(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
@@ -76,10 +76,10 @@ void SafeStatus::safeBlePrint(const String &value) {
 #endif
 }
 
-void setFloatValue(BLECharacteristic &characteristic, const float value) {
-  byte arr[4];
-  memcpy(arr, (uint8_t *) &value, 4);
-  characteristic.writeValue(arr, 4);
+void setDoubleValue(BLECharacteristic &characteristic, const double value) {
+  byte arr[8];
+  memcpy(arr, (uint8_t *) &value, 8);
+  characteristic.writeValue(arr, 8);
 }
 
 void setIntValue(BLECharacteristic &characteristic, const int value) {
@@ -88,25 +88,25 @@ void setIntValue(BLECharacteristic &characteristic, const int value) {
   characteristic.writeValue(arr, 4);
 }
 
-void SafeStatus::setMaxRadius(const float value) {
+void SafeStatus::setMaxRadius(const double value) {
 #if USE_BLE > 0
-  setFloatValue(bleMaxRadius, value);
+  setDoubleValue(bleMaxRadius, value);
   Serial.print("Writing BLE max radius: ");
   Serial.println(value);
 #endif
 }
 
-void SafeStatus::setRadiusStepSize(const float value) {
+void SafeStatus::setRadiusStepSize(const double value) {
 #if USE_BLE > 0
-  setFloatValue(bleRadiusStepSize, value);
+  setDoubleValue(bleRadiusStepSize, value);
   Serial.print("Writing BLE radius step size: ");
   Serial.println(value);
 #endif
 }
 
-void SafeStatus::setAzimuthStepSize(const float value) {
+void SafeStatus::setAzimuthStepSize(const double value) {
 #if USE_BLE > 0
-  setFloatValue(bleAzimuthStepSize, value);
+  setDoubleValue(bleAzimuthStepSize, value);
   Serial.print("Writing BLE azimuth step size: ");
   Serial.println(value);
 #endif
