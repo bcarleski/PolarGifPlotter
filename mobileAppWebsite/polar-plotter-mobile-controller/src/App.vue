@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, shallowRef } from 'vue';
+import { computed, reactive } from 'vue';
 import CalibrationPushing from './components/CalibrationPushing.vue'
 import InitializingState from './components/InitializingState.vue'
 import ManualMoving from './components/ManualMoving.vue'
@@ -21,7 +21,7 @@ const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSi
   sendCmd: undefined
 })
 
-const data : {device:undefined|BluetoothDevice|{}, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
+const data : {device:undefined|BluetoothDevice, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
   device: undefined,
   supported: navigator && 'bluetooth' in navigator,
   disabled: false,
