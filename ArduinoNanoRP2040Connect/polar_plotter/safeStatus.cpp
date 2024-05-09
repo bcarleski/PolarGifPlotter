@@ -49,7 +49,6 @@ void SafeStatus::init() {
   bleService.addCharacteristic(bleStep);
   bleService.addCharacteristic(blePosition);
   bleService.addCharacteristic(bleState);
-  bleState.writeValue("Initializing");
 #endif
 }
 
@@ -72,6 +71,8 @@ void SafeStatus::safeBlePrint(const String &value) {
 
 #if USE_BLE > 0
   bleStatus.writeValue(val);
+  Serial.print("Writing BLE status: ");
+  Serial.println(val);
 #endif
 }
 
@@ -90,24 +91,32 @@ void setIntValue(BLECharacteristic &characteristic, const int value) {
 void SafeStatus::setMaxRadius(const float value) {
 #if USE_BLE > 0
   setFloatValue(bleMaxRadius, value);
+  Serial.print("Writing BLE max radius: ");
+  Serial.println(value);
 #endif
 }
 
 void SafeStatus::setRadiusStepSize(const float value) {
 #if USE_BLE > 0
   setFloatValue(bleRadiusStepSize, value);
+  Serial.print("Writing BLE radius step size: ");
+  Serial.println(value);
 #endif
 }
 
 void SafeStatus::setAzimuthStepSize(const float value) {
 #if USE_BLE > 0
   setFloatValue(bleAzimuthStepSize, value);
+  Serial.print("Writing BLE azimuth step size: ");
+  Serial.println(value);
 #endif
 }
 
 void SafeStatus::setMarbleSizeInRadiusSteps(const int value) {
 #if USE_BLE > 0
   setIntValue(bleMarbleSize, value);
+  Serial.print("Writing BLE marble size in radius steps: ");
+  Serial.println(value);
 #endif
 }
 
@@ -119,6 +128,8 @@ void SafeStatus::setCurrentDrawing(const String &value) {
   }
 
   bleDrawing.writeValue(val);
+  Serial.print("Writing BLE drawing: ");
+  Serial.println(val);
 #endif
 }
 
@@ -130,6 +141,8 @@ void SafeStatus::setCurrentStep(const String &value) {
   }
 
   bleStep.writeValue(val);
+  Serial.print("Writing BLE current step: ");
+  Serial.println(val);
 #endif
 }
 
@@ -141,6 +154,8 @@ void SafeStatus::setPosition(const String &value) {
   }
 
   blePosition.writeValue(val);
+  Serial.print("Writing BLE position: ");
+  Serial.println(val);
 #endif
 }
 
@@ -152,6 +167,8 @@ void SafeStatus::setState(const String &value) {
   }
 
   bleState.writeValue(val);
+  Serial.print("Writing BLE state: ");
+  Serial.println(val);
 #endif
 }
 

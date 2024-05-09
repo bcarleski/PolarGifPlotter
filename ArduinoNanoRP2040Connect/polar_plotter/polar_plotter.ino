@@ -1,8 +1,6 @@
 #include "secrets.h"
 #include "constants.h"
 
-#include <kvstore_global_api.h>
-#include <mbed_error.h>
 #include <PolarPlotterCore.h>
 #include "safePrinter.h"
 #include "safeStatus.h"
@@ -92,29 +90,28 @@ void setup() {
     plotter.addCommand(cmd + DEFAULT_DEBUG_LEVEL);
   }
 
-  bool radiusLoaded = loadSavedDouble(radiusStepSizeKey, &radiusStepSize);
-  bool azimuthLoaded = loadSavedDouble(azimuthStepSizeKey, &azimuthStepSize);
-
-  if (radiusLoaded && azimuthLoaded) {
-    plotter.calibrate(RADIUS_STEP_SIZE, AZIMUTH_STEP_SIZE);
-  } else {
-    String cmd = ".C";  // Start calibration
-    plotter.addCommand(cmd);
-  }
-
 #if USE_BLE > 0
+  status.setMaxRadius(maxRadius);
+  status.setMarbleSizeInRadiusSteps(marbleSizeInRadiusSteps);
+  status.setRadiusStepSize(0.0);
+  status.setAzimuthStepSize(0.0);
+  status.setCurrentStep("-");
+  status.setCurrentDrawing("-");
+  status.setPosition("-");
+  status.setState("Initializing");
   bleService.addCharacteristic(bleCommand);
   BLE.addService(bleService);
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
-  status.setMaxRadius(maxRadius);
-  status.setMarbleSizeInRadiusSteps(marbleSizeInRadiusSteps);
   bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
   bleCommand.setValue("");
   // start advertising
   BLE.advertise();
   if (Serial) Serial.println("BLE waiting for connections");
 #endif
+
+  String cmd = ".M";  // Start manual
+  plotter.addCommand(cmd);
 
   printer.println("Finished Setup");
   status.status("FINISHED SETUP");
@@ -137,34 +134,6 @@ void loop() {
     getCommands();
 #endif
   }
-}
-
-bool saveDouble(const char* stringKey, double value) {
-  String val(value, 6);
-  int result = kv_set(stringKey,  val.c_str(), val.length() + 1, 0);
-  return result == MBED_SUCCESS;
-}
-
-bool loadSavedDouble(const char* stringKey, double* value) {
-  kv_info_t infoBuffer;
-  int result = kv_get_info(stringKey, &infoBuffer);
-
-  if (result = MBED_SUCCESS) {
-    char *readBuffer = new char[infoBuffer.size];
-    size_t actualSize;
-    memset(readBuffer, 0, infoBuffer.size);
-    result = kv_get(stringKey, readBuffer, infoBuffer.size, &actualSize);
-
-    if (result == MBED_SUCCESS) {
-      String str(readBuffer, actualSize);
-      *value = str.toDouble();
-      return true;
-    }
-
-    delete[] readBuffer;
-  }
-
-  return false;
 }
 
 void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
@@ -196,8 +165,6 @@ void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSte
   azimuthStepSize = (2 * PI) / fullCircleAzimuthSteps;
 
   plotter.calibrate(radiusStepSize, azimuthStepSize);
-  saveDouble(radiusStepSizeKey, radiusStepSize);
-  saveDouble(azimuthStepSizeKey, azimuthStepSize);
 }
 
 void handleSerialInput() {

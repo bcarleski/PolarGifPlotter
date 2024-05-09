@@ -19,7 +19,7 @@
 #define BLE_STATE_UUID "ec314ea1-7426-47fb-825c-8fbd8b02f7fe"
 #define BLE_STRING_SIZE 512
 
-#define DEFAULT_DEBUG_LEVEL 9
+#define DEFAULT_DEBUG_LEVEL 0
 #define DRAWINGS_FILE "/drawings.json"
 #define DRAWING_PATH_PREFIX "/drawings/"
 
