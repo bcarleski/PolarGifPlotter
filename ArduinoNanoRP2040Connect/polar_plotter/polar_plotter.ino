@@ -90,7 +90,7 @@ void setup() {
   status.setCurrentDrawing("-");
   status.setCurrentCommand("-");
   status.setCurrentStep(0);
-  status.setPosition("-");
+  status.setPosition(0, 0);
   status.setState("Initializing");
   bleService.addCharacteristic(bleCommand);
   BLE.addService(bleService);

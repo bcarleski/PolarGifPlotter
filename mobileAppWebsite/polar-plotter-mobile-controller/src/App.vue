@@ -8,14 +8,15 @@ import WorkingState from './components/WorkingState.vue'
 
 const decoder = new TextDecoder()
 const encoder = new TextEncoder()
-const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSize:number, marbleSizeInRadiusSteps:number, currentDrawing:string, currentStep:string, position:string, state:string, status:string, sendCmd:BluetoothRemoteGATTCharacteristic | undefined} = reactive({
+const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSize:number, marbleSizeInRadiusSteps:number, currentDrawing:string, currentStep:string, radius:number, azimuth:number, state:string, status:string, sendCmd:BluetoothRemoteGATTCharacteristic | undefined} = reactive({
   maxRadius: 0,
   radiusStepSize: 0,
   azimuthStepSize: 0,
   marbleSizeInRadiusSteps: 0,
   currentDrawing: 'Unknown',
   currentStep: 'Unknown',
-  position: 'Unknown',
+  radius: 0,
+  azimuth: 0,
   state: 'Initializing',
   status: '',
   sendCmd: undefined
@@ -111,7 +112,8 @@ async function requestDevice() {
       await monitorProperty(svc, '60af168a-b702-4d0b-8c1b-f35c7a436781', (dv) => deviceProperties.marbleSizeInRadiusSteps = dv ? dv.getInt32(0, true) : 0)
       await monitorProperty(svc, 'fa95bee6-46f9-4898-913a-0575019d3d33', (dv) => deviceProperties.currentDrawing = dv ? decoder.decode(dv) : '')
       await monitorProperty(svc, '54a63a69-90ce-4b14-a103-46152bb1da68', (dv) => deviceProperties.currentStep = dv ? decoder.decode(dv) : '')
-      await monitorProperty(svc, '7fcd311a-fafa-47ee-80b8-618616697a59', (dv) => deviceProperties.position = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, '7fcd311a-fafa-47ee-80b8-618616697a59', (dv) => deviceProperties.radius = dv ? dv.getFloat64(0, true) : 0)
+      await monitorProperty(svc, 'eb654acc-3430-45e3-8dc9-22c9fe982518', (dv) => deviceProperties.azimuth = dv ? dv.getFloat64(0, true) : 0)
       await monitorProperty(svc, '52eb19a4-6421-4910-a8ca-7ff75ef2f56b', (dv) => deviceProperties.status = dv ? decoder.decode(dv) : '')
       await monitorProperty(svc, 'ec314ea1-7426-47fb-825c-8fbd8b02f7fe', (dv) => deviceProperties.state = dv ? decoder.decode(dv) : '')
       data.message += ', added monitors'
@@ -154,7 +156,8 @@ async function sendCommand(cmd: string) {
         <div>Marble Size: {{ deviceProperties.marbleSizeInRadiusSteps }}</div>
         <div>Drawing: {{ deviceProperties.currentDrawing }}</div>
         <div>Step: {{ deviceProperties.currentStep }}</div>
-        <div>Position: {{ deviceProperties.position }}</div>
+        <div>Radius: {{ deviceProperties.radius }}</div>
+        <div>Azimuth: {{ deviceProperties.azimuth }}</div>
         <div>Status: {{ deviceProperties.status }}</div>
         <div v-if="deviceProperties.state === 'Initializing'">
           <InitializingState />

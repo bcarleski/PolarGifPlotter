@@ -24,7 +24,8 @@ SafeStatus::SafeStatus(
   bleDrawing(BLEStringCharacteristic(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
   bleCommand(BLEStringCharacteristic(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
   bleStep(BLEIntCharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify)),
-  blePosition(BLEStringCharacteristic(BLE_POSITION_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleRadius(BLEDoubleCharacteristic(BLE_RADIUS_UUID, BLERead | BLENotify)),
+  bleAzimuth(BLEDoubleCharacteristic(BLE_AZIMUTH_UUID, BLERead | BLENotify)),
   bleState(BLEStringCharacteristic(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING_SIZE))
 #endif
 {
@@ -49,7 +50,8 @@ void SafeStatus::init() {
   bleService.addCharacteristic(bleDrawing);
   bleService.addCharacteristic(bleCommand);
   bleService.addCharacteristic(bleStep);
-  bleService.addCharacteristic(blePosition);
+  bleService.addCharacteristic(bleRadius);
+  bleService.addCharacteristic(bleAzimuth);
   bleService.addCharacteristic(bleState);
 #endif
 }
@@ -164,13 +166,14 @@ void SafeStatus::setCurrentStep(const int value) {
 #endif
 }
 
-void SafeStatus::setPosition(const String &value) {
+void SafeStatus::setPosition(const double radius, const double azimuth) {
 #if USE_BLE > 0
   unsigned long cur = millis();
   if (cur < nextPositionUpdate) return;
 
   nextPositionUpdate = cur + POSITION_UPDATE_INTERVAL;
-  setStringValue(blePosition, "Position", value);
+  setDoubleValue(bleRadius, "Radius", radius);
+  setDoubleValue(bleAzimuth, "Azimuth", azimuth);
 #endif
 }
 

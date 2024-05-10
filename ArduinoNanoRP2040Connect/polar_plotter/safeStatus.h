@@ -23,11 +23,12 @@ private:
   BLEDoubleCharacteristic bleRadiusStepSize;
   BLEDoubleCharacteristic bleAzimuthStepSize;
   BLEIntCharacteristic bleMarbleSize;
-  BLEIntCharacteristic bleStep;
   BLEStringCharacteristic bleStatus;
   BLEStringCharacteristic bleDrawing;
   BLEStringCharacteristic bleCommand;
-  BLEStringCharacteristic blePosition;
+  BLEIntCharacteristic bleStep;
+  BLEDoubleCharacteristic bleRadius;
+  BLEDoubleCharacteristic bleAzimuth;
   BLEStringCharacteristic bleState;
 #endif
   String lastKey;
@@ -54,7 +55,7 @@ public:
   void setCurrentDrawing(const String &value);
   void setCurrentCommand(const String &value);
   void setCurrentStep(const int value);
-  void setPosition(const String &value);
+  void setPosition(const double radius, const double azimuth);
   void setState(const String &value);
 
   void save();
