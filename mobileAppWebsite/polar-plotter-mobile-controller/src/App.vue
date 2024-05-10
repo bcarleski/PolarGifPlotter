@@ -42,6 +42,14 @@ const isManualState = computed(() => {
   return deviceProperties.state && deviceProperties.state.startsWith('Manual ')
 })
 
+const azimuthStepSizeDegrees = computed(() => {
+  return deviceProperties.azimuthStepSize * 180 / Math.PI;
+})
+
+const azimuthDegrees = computed(() => {
+  return deviceProperties.azimuth * 180 / Math.PI;
+})
+
 function clearDevice(evt: Event) {
   data.device = undefined
 }
@@ -152,12 +160,12 @@ async function sendCommand(cmd: string) {
       <main>
         <div>Max Radius: {{ deviceProperties.maxRadius }}</div>
         <div>Radius Step Size: {{ deviceProperties.radiusStepSize }}</div>
-        <div>Azimuth Step Size: {{ deviceProperties.azimuthStepSize }}</div>
+        <div>Azimuth Step Size: {{ azimuthStepSizeDegrees }}&deg;</div>
         <div>Marble Size: {{ deviceProperties.marbleSizeInRadiusSteps }}</div>
         <div>Drawing: {{ deviceProperties.currentDrawing }}</div>
         <div>Step: {{ deviceProperties.currentStep }}</div>
         <div>Radius: {{ deviceProperties.radius }}</div>
-        <div>Azimuth: {{ deviceProperties.azimuth }}</div>
+        <div>Azimuth: {{ azimuthDegrees }}&deg;</div>
         <div>Status: {{ deviceProperties.status }}</div>
         <div v-if="deviceProperties.state === 'Initializing'">
           <InitializingState />
