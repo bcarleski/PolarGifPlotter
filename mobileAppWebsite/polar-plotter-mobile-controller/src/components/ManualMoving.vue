@@ -19,6 +19,9 @@
     <button @click="emit('sendCommand', 'R')" v-else :disabled="disabled">Switch to Radius</button>
   </div>
   <div>
+    <button @click="emit('sendCommand', 'C')" :disabled="disabled">Move to Center</button>
+  </div>
+  <div>
     <button @click="emit('sendCommand', 'X')" :disabled="disabled">Exit Manual</button>
   </div>
 </template>
