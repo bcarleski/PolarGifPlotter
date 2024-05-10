@@ -16,7 +16,7 @@ const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSi
   currentDrawing: 'Unknown',
   currentStep: 'Unknown',
   position: 'Unknown',
-  state: 'Calibrating Radius',
+  state: 'Initializing',
   status: '',
   sendCmd: undefined
 })
@@ -101,19 +101,20 @@ async function requestDevice() {
 
     if (svc) {
       data.message += ', got service'
-      await monitorProperty(svc, 'fb65af7d-494f-4a45-8872-6e6ffbf0703c', (dv) => deviceProperties.maxRadius = dv ? dv.getFloat32(0, true) : 0)
-      await monitorProperty(svc, 'fd18cf65-85d7-4730-ad77-4cc3fabaab99', (dv) => deviceProperties.radiusStepSize = dv ? dv.getFloat32(0, true) : 0)
-      await monitorProperty(svc, '4dc9c338-0004-4c05-bd26-bb13e55c3bb9', (dv) => deviceProperties.azimuthStepSize = dv ? dv.getFloat32(0, true) : 0)
+
+      deviceProperties.sendCmd = await svc.getCharacteristic('66af95bc-3dd1-4343-b4b5-ad328b33fda7')
+      data.message += deviceProperties.sendCmd ? ', got send command' : ', could not get send command'
+
+      await monitorProperty(svc, 'fb65af7d-494f-4a45-8872-6e6ffbf0703c', (dv) => deviceProperties.maxRadius = dv ? dv.getFloat64(0, true) : 0)
+      await monitorProperty(svc, 'fd18cf65-85d7-4730-ad77-4cc3fabaab99', (dv) => deviceProperties.radiusStepSize = dv ? dv.getFloat64(0, true) : 0)
+      await monitorProperty(svc, '4dc9c338-0004-4c05-bd26-bb13e55c3bb9', (dv) => deviceProperties.azimuthStepSize = dv ? dv.getFloat64(0, true) : 0)
       await monitorProperty(svc, '60af168a-b702-4d0b-8c1b-f35c7a436781', (dv) => deviceProperties.marbleSizeInRadiusSteps = dv ? dv.getInt32(0, true) : 0)
       await monitorProperty(svc, 'fa95bee6-46f9-4898-913a-0575019d3d33', (dv) => deviceProperties.currentDrawing = dv ? decoder.decode(dv) : '')
       await monitorProperty(svc, '54a63a69-90ce-4b14-a103-46152bb1da68', (dv) => deviceProperties.currentStep = dv ? decoder.decode(dv) : '')
       await monitorProperty(svc, '7fcd311a-fafa-47ee-80b8-618616697a59', (dv) => deviceProperties.position = dv ? decoder.decode(dv) : '')
-      await monitorProperty(svc, 'ec314ea1-7426-47fb-825c-8fbd8b02f7fe', (dv) => deviceProperties.state = dv ? decoder.decode(dv) : '')
       await monitorProperty(svc, '52eb19a4-6421-4910-a8ca-7ff75ef2f56b', (dv) => deviceProperties.status = dv ? decoder.decode(dv) : '')
+      await monitorProperty(svc, 'ec314ea1-7426-47fb-825c-8fbd8b02f7fe', (dv) => deviceProperties.state = dv ? decoder.decode(dv) : '')
       data.message += ', added monitors'
-
-      deviceProperties.sendCmd = await svc.getCharacteristic('66af95bc-3dd1-4343-b4b5-ad328b33fda7')
-      data.message += deviceProperties.sendCmd ? ', got send command' : ', could not get send command'
     }
   } catch (err) {
     data.error = 'REQUEST ERROR: ' + err
@@ -165,7 +166,7 @@ async function sendCommand(cmd: string) {
           <ManualMoving :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
         </div>
         <div v-else-if="isCalibrationState">
-          <CalibrationPushing :disabled="data.disabled" @send-command="sendCommand" />
+          <CalibrationPushing :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
         </div>
         <div v-else>
           <UnknownState />

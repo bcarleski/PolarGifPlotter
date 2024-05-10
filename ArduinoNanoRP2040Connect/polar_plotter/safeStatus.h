@@ -9,6 +9,9 @@
 #include <ArduinoBLE.h>
 #endif
 
+#define POSITION_UPDATE_INTERVAL 500
+#define STEP_UPDATE_INTERVAL 500
+
 class SafeStatus : public StatusUpdate {
 private:
 #if USE_LCD > 0
@@ -16,22 +19,24 @@ private:
 #endif
 #if USE_BLE > 0
   BLEService& bleService;
-  BLECharacteristic bleMaxRadius;
-  BLECharacteristic bleRadiusStepSize;
-  BLECharacteristic bleAzimuthStepSize;
-  BLECharacteristic bleMarbleSize;
+  BLEDoubleCharacteristic bleMaxRadius;
+  BLEDoubleCharacteristic bleRadiusStepSize;
+  BLEDoubleCharacteristic bleAzimuthStepSize;
+  BLEIntCharacteristic bleMarbleSize;
+  BLEIntCharacteristic bleStep;
   BLEStringCharacteristic bleStatus;
   BLEStringCharacteristic bleDrawing;
-  BLEStringCharacteristic bleStep;
+  BLEStringCharacteristic bleCommand;
   BLEStringCharacteristic blePosition;
   BLEStringCharacteristic bleState;
 #endif
   String lastKey;
   String lastValue;
   bool preservePair;
+  unsigned long nextPositionUpdate;
+  unsigned long nextStepUpdate;
 
   void safeLcdPrint(const String &value);
-  void safeBlePrint(const String &value);
 
 public:
   SafeStatus(
@@ -47,7 +52,8 @@ public:
   void setAzimuthStepSize(const double value);
   void setMarbleSizeInRadiusSteps(const int value);
   void setCurrentDrawing(const String &value);
-  void setCurrentStep(const String &value);
+  void setCurrentCommand(const String &value);
+  void setCurrentStep(const int value);
   void setPosition(const String &value);
   void setState(const String &value);
 

@@ -1,8 +1,12 @@
 <script setup lang="ts">
-  defineProps<{ disabled: boolean }>()
+  import { ref } from 'vue';
+
+  defineProps<{ state: string, disabled: boolean }>()
   const emit = defineEmits<{
     (e:'sendCommand', command: string): void
   }>()
+  const radiusSteps = ref(10500)
+  const azimuthSteps = ref(4810)
 </script>
 
 <template>
@@ -16,6 +20,11 @@
   </div>
   <div>
     <button @click="emit('sendCommand', 'A')" :disabled="disabled">Accept</button>
+  </div>
+  <div v-if="state === 'Calibrating Center'">
+    <div>Radius Steps: <input type="number" v-model="radiusSteps" /></div>
+    <div>Azimuth Steps: <input type="number" v-model="azimuthSteps" /></div>
+    <button @click="emit('sendCommand', 'E' + radiusSteps + ',' + azimuthSteps)" :disabled="disabled">Explicit Calibration</button>
   </div>
   <div>
     <button @click="emit('sendCommand', '.M')" :disabled="disabled">Manual</button>

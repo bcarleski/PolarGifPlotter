@@ -6,8 +6,8 @@
 </script>
 
 <template>
-  <button v-if="state === 'Paused'" @click="emit('sendCommand', '.P')" :disabled="disabled">Pause</button>
-  <button v-else @click="emit('sendCommand', '.R')" :disabled="disabled">Resume</button>
+  <button v-if="state === 'Paused'" @click="emit('sendCommand', '.R')" :disabled="disabled">Resume</button>
+  <button v-else @click="emit('sendCommand', '.P')" :disabled="disabled">Pause</button>
   <button @click="emit('sendCommand', '.W')" :disabled="disabled">Wipe</button>
   <button @click="emit('sendCommand', '.C')" :disabled="disabled">Calibrate</button>
   <button @click="emit('sendCommand', '.M')" :disabled="disabled">Manual</button>

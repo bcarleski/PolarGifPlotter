@@ -9,7 +9,7 @@
 
 #if USE_CLOUD > 0
 #include <WiFiNINA.h>
-#include "drawingClient.h"
+#include "httpDrawingProducer.h"
 
 const String drawingsHost = DRAWINGS_HOST;
 const int drawingsPort = DRAWINGS_PORT;
@@ -18,7 +18,10 @@ const String drawingPathPrefix = DRAWING_PATH_PREFIX;
 
 WiFiClient wifiClient;
 HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
-DrawingClient drawings(httpClient, drawingsFile, drawingPathPrefix);
+HttpDrawingProducer drawings(httpClient, drawingsFile, drawingPathPrefix);
+#else
+#include "knownDrawingProducer.h"
+KnownDrawingProducer drawings;
 #endif
 #if USE_BLE > 0
 BLEService bleService(BLE_SERVICE_UUID);
@@ -47,6 +50,9 @@ PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps);
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
 unsigned long waitingEndsAt = 0;
+bool bleInitialized = false;
+bool bleAdvertising = false;
+
 enum LoopState {
   CYCLING,
   WAITING_WIFI,
@@ -59,21 +65,7 @@ void setup() {
   delay(2000);
   loopState = CYCLING;
 
-
-#if USE_BLE > 0
-  int bleBegin = BLE.begin();
-  if (!bleBegin) {
-    if (Serial) {
-      Serial.print("Starting Bluetooth® Low Energy failed!");
-      Serial.println(bleBegin);
-    }
-    while (!bleBegin)
-      ;
-  }
-  // set advertised local name and service UUID:
-  BLE.setLocalName(BLE_DEVICE_NAME);
-  BLE.setAdvertisedService(bleService);
-#endif
+  bleInitialize(true);
 
   status.init();
 
@@ -95,8 +87,9 @@ void setup() {
   status.setMarbleSizeInRadiusSteps(marbleSizeInRadiusSteps);
   status.setRadiusStepSize(0.0);
   status.setAzimuthStepSize(0.0);
-  status.setCurrentStep("-");
   status.setCurrentDrawing("-");
+  status.setCurrentCommand("-");
+  status.setCurrentStep(0);
   status.setPosition("-");
   status.setState("Initializing");
   bleService.addCharacteristic(bleCommand);
@@ -105,10 +98,9 @@ void setup() {
   BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
   bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
   bleCommand.setValue("");
-  // start advertising
-  BLE.advertise();
-  if (Serial) Serial.println("BLE waiting for connections");
 #endif
+
+  bleAdvertise();
 
   String cmd = ".M";  // Start manual
   plotter.addCommand(cmd);
@@ -129,11 +121,78 @@ void loop() {
 
   if (plotter.canCycle()) {
     plotter.performCycle();
-#if USE_CLOUD > 0
+    if (plotter.isPaused()) {
+      delay(200);
+    }
   } else {
+#if USE_CLOUD > 0
     getCommands();
+#else
+    tryGetDrawingUpdate();
 #endif
   }
+}
+
+const bool isBleConnected() {
+#if USE_BLE > 0
+  return BLE.connected();
+#else
+  return false;
+#endif
+}
+
+void bleInitialize(bool holdOnFailure) {
+  if (bleInitialized) return;
+
+#if USE_BLE > 0
+  if (Serial) Serial.println("Starting BLE");
+  int bleBegin = BLE.begin();
+  if (!bleBegin) {
+    if (Serial) {
+      Serial.print(" BLE Start failed - ");
+      Serial.println(bleBegin);
+    }
+
+    while (holdOnFailure);
+  } else {
+    // set advertised local name and service UUID:
+    BLE.setLocalName(BLE_DEVICE_NAME);
+    BLE.setAdvertisedService(bleService);
+  }
+#endif
+  bleInitialized = true;
+}
+
+void bleAdvertise() {
+  if (!bleInitialized || bleAdvertising) return;
+
+#if USE_BLE > 0
+  // start advertising
+  BLE.advertise();
+  if (Serial) Serial.println("BLE waiting for connections");
+#endif
+}
+
+void bleDestroy() {
+  if (!bleInitialized) return;
+
+#if USE_BLE > 0
+  if (BLE.connected()) {
+    if (Serial) Serial.println("BLE disconnecting");
+    BLE.disconnect();
+  }
+
+  if (bleAdvertising) {
+    if (Serial) Serial.println("BLE stopping advertise");
+    BLE.stopAdvertise();
+  }
+
+  //if (Serial) Serial.println("BLE shutting down");
+  //BLE.end();
+#endif
+
+  bleAdvertising = false;
+  bleInitialized = false;
 }
 
 void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
@@ -172,6 +231,28 @@ void handleSerialInput() {
     String command = Serial.readStringUntil('\n');
     plotter.addCommand(command);
   }
+}
+
+bool tryGetDrawingUpdate() {
+  drawingUpdateAttempt++;
+  String attempt = "ATTEMPT: ";
+  printer.println("Attempting to get drawing update");
+  status.status("Updating Drawing", attempt + drawingUpdateAttempt);
+
+  if (!drawings.tryGetNewDrawing()) return false;
+
+  String drawing = drawings.getDrawing();
+  int commandCount = drawings.getCommandCount();
+
+  printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
+  plotter.newDrawing(drawing);
+
+  for (int i = 0; i < commandCount; i++) {
+    String command = drawings.getCommand(i);
+    plotter.addCommand(command);
+  }
+
+  return true;
 }
 
 #if USE_BLE > 0
@@ -232,41 +313,20 @@ void doBackoffDelay() {
 }
 
 bool tryConnectWiFi() {
-  printer.print("Attempting to connect to wifi: ");
+  printer.println("Attempting to connect to wifi: ");
+  //bleDestroy();
 
   for (int i = 0; i < NETWORK_PROFILE_COUNT; i++) {
     NetworkProfile profile = networkProfiles[i];
     String ssid = profile.getSsid();
     status.status("WIFI Connecting", ssid);
     if (WiFi.begin(ssid.c_str(), profile.getPass().c_str()) == WL_CONNECTED) {
-      printer.println("Connected to " + ssid);
+      printer.println("WIFI Connected to " + ssid);
       return true;
     }
   }
 
-  printer.println("FAILED");
+  printer.println("WIFI connect FAILED");
   return false;
-}
-
-bool tryGetDrawingUpdate() {
-  drawingUpdateAttempt++;
-  String attempt = "ATTEMPT: ";
-  printer.println("Attempting to get drawing update");
-  status.status("Updating Drawing", attempt + drawingUpdateAttempt);
-
-  if (!drawings.tryGetNewDrawing()) return false;
-
-  String drawing = drawings.getDrawing();
-  int commandCount = drawings.getCommandCount();
-
-  printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
-  plotter.newDrawing(drawing);
-
-  for (int i = 0; i < commandCount; i++) {
-    String command = drawings.getCommand(i);
-    plotter.addCommand(command);
-  }
-
-  return true;
 }
 #endif

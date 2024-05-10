@@ -16,13 +16,14 @@ SafeStatus::SafeStatus(
 #endif
 #if USE_BLE > 0
   bleService(bleService),
-  bleMaxRadius(BLECharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify, 8)),
-  bleRadiusStepSize(BLECharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify, 8)),
-  bleAzimuthStepSize(BLECharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify, 8)),
-  bleMarbleSize(BLECharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify, 4)),
+  bleMaxRadius(BLEDoubleCharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify)),
+  bleRadiusStepSize(BLEDoubleCharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify)),
+  bleAzimuthStepSize(BLEDoubleCharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify)),
+  bleMarbleSize(BLEIntCharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify)),
   bleStatus(BLEStringCharacteristic(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
   bleDrawing(BLEStringCharacteristic(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
-  bleStep(BLEStringCharacteristic(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleCommand(BLEStringCharacteristic(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
+  bleStep(BLEIntCharacteristic(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify)),
   blePosition(BLEStringCharacteristic(BLE_POSITION_UUID, BLERead | BLENotify, BLE_STRING_SIZE)),
   bleState(BLEStringCharacteristic(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING_SIZE))
 #endif
@@ -46,6 +47,7 @@ void SafeStatus::init() {
   bleService.addCharacteristic(bleMarbleSize);
   bleService.addCharacteristic(bleStatus);
   bleService.addCharacteristic(bleDrawing);
+  bleService.addCharacteristic(bleCommand);
   bleService.addCharacteristic(bleStep);
   bleService.addCharacteristic(blePosition);
   bleService.addCharacteristic(bleState);
@@ -63,116 +65,120 @@ void SafeStatus::safeLcdPrint(const String &value) {
 #endif
 }
 
-void SafeStatus::safeBlePrint(const String &value) {
+void setStringValue(BLECharacteristic &characteristic, const char * name, const String &value) {
   String val = value;
   if (val.length() > BLE_STRING_SIZE) {
     val = val.substring(0, BLE_STRING_SIZE);
   }
 
-#if USE_BLE > 0
-  bleStatus.writeValue(val);
-  Serial.print("Writing BLE status: ");
-  Serial.println(val);
+#if BLE_DEBUG > 0
+  Serial.print("Writing BLE ");
+  Serial.print(name);
+  Serial.print(": ");
+  Serial.print(val);
+  Serial.print(" - ");
+#endif
+  int ret = characteristic.writeValue(val.c_str(), false);
+#if BLE_DEBUG > 0
+  Serial.println(ret);
 #endif
 }
 
-void setDoubleValue(BLECharacteristic &characteristic, const double value) {
+void setDoubleValue(BLECharacteristic &characteristic, const char * name, const double value) {
+#if BLE_DEBUG > 0
+  Serial.print("Writing BLE ");
+  Serial.print(name);
+  Serial.print(": ");
+  Serial.print(value);
+  Serial.print(" - ");
+#endif
+
   byte arr[8];
   memcpy(arr, (uint8_t *) &value, 8);
-  characteristic.writeValue(arr, 8);
+  int ret = characteristic.writeValue(arr, 8, false);
+#if BLE_DEBUG > 0
+  Serial.println(ret);
+#endif
 }
 
-void setIntValue(BLECharacteristic &characteristic, const int value) {
+void setIntValue(BLECharacteristic &characteristic, const char * name, const int value) {
+#if BLE_DEBUG > 0
+  Serial.print("Writing BLE ");
+  Serial.print(name);
+  Serial.print(": ");
+  Serial.print(value);
+  Serial.print(" - ");
+#endif
+
   byte arr[4];
   memcpy(arr, (uint8_t *) &value, 4);
-  characteristic.writeValue(arr, 4);
+  int ret = characteristic.writeValue(arr, 4, false);
+#if BLE_DEBUG > 0
+  Serial.println(ret);
+#endif
 }
 
 void SafeStatus::setMaxRadius(const double value) {
 #if USE_BLE > 0
-  setDoubleValue(bleMaxRadius, value);
-  Serial.print("Writing BLE max radius: ");
-  Serial.println(value);
+  setDoubleValue(bleMaxRadius, "Max Radius", value);
 #endif
 }
 
 void SafeStatus::setRadiusStepSize(const double value) {
 #if USE_BLE > 0
-  setDoubleValue(bleRadiusStepSize, value);
-  Serial.print("Writing BLE radius step size: ");
-  Serial.println(value);
+  setDoubleValue(bleRadiusStepSize, "Radius Step Size", value);
 #endif
 }
 
 void SafeStatus::setAzimuthStepSize(const double value) {
 #if USE_BLE > 0
-  setDoubleValue(bleAzimuthStepSize, value);
-  Serial.print("Writing BLE azimuth step size: ");
-  Serial.println(value);
+  setDoubleValue(bleAzimuthStepSize, "Azimuth Step Size", value);
 #endif
 }
 
 void SafeStatus::setMarbleSizeInRadiusSteps(const int value) {
 #if USE_BLE > 0
-  setIntValue(bleMarbleSize, value);
-  Serial.print("Writing BLE marble size in radius steps: ");
-  Serial.println(value);
+  setIntValue(bleMarbleSize, "Marble Size in Radius Steps", value);
 #endif
 }
 
 void SafeStatus::setCurrentDrawing(const String &value) {
 #if USE_BLE > 0
-  String val = value;
-  if (val.length() > BLE_STRING_SIZE) {
-    val = val.substring(0, BLE_STRING_SIZE);
-  }
-
-  bleDrawing.writeValue(val);
-  Serial.print("Writing BLE drawing: ");
-  Serial.println(val);
+  setStringValue(bleDrawing, "Drawing", value);
 #endif
 }
 
-void SafeStatus::setCurrentStep(const String &value) {
+void SafeStatus::setCurrentCommand(const String &value) {
 #if USE_BLE > 0
-  String val = value;
-  if (val.length() > BLE_STRING_SIZE) {
-    val = val.substring(0, BLE_STRING_SIZE);
-  }
+  setStringValue(bleCommand, "Command", value);
+#endif
+}
 
-  bleStep.writeValue(val);
-  Serial.print("Writing BLE current step: ");
-  Serial.println(val);
+void SafeStatus::setCurrentStep(const int value) {
+#if USE_BLE > 0
+  unsigned long cur = millis();
+  if (cur < nextStepUpdate) return;
+
+  nextStepUpdate = cur + STEP_UPDATE_INTERVAL;
+  setIntValue(bleStep, "Step", value);
 #endif
 }
 
 void SafeStatus::setPosition(const String &value) {
 #if USE_BLE > 0
-  String val = value;
-  if (val.length() > BLE_STRING_SIZE) {
-    val = val.substring(0, BLE_STRING_SIZE);
-  }
+  unsigned long cur = millis();
+  if (cur < nextPositionUpdate) return;
 
-  blePosition.writeValue(val);
-  Serial.print("Writing BLE position: ");
-  Serial.println(val);
+  nextPositionUpdate = cur + POSITION_UPDATE_INTERVAL;
+  setStringValue(blePosition, "Position", value);
 #endif
 }
 
 void SafeStatus::setState(const String &value) {
 #if USE_BLE > 0
-  String val = value;
-  if (val.length() > BLE_STRING_SIZE) {
-    val = val.substring(0, BLE_STRING_SIZE);
-  }
-
-  bleState.writeValue(val);
-  Serial.print("Writing BLE state: ");
-  Serial.println(val);
+  setStringValue(bleState, "State", value);
 #endif
 }
-
-
 
 void SafeStatus::writeStatus(const String &key, const String &value) {
 #if USE_LCD > 0
@@ -183,7 +189,7 @@ void SafeStatus::writeStatus(const String &key, const String &value) {
   this->safeLcdPrint(value);
 #endif
 #if USE_BLE > 0
-  this->safeBlePrint(key + (key.length() > 0 && value.length() > 0 ? ": " : "") + value);
+  setStringValue(bleStatus, "Status", key + (key.length() > 0 && value.length() > 0 ? ": " : "") + value);
 #endif
 
   if (!this->preservePair) {
