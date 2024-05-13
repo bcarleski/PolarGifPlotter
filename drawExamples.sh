@@ -16,9 +16,10 @@ fi
 cd "$PLOTTER_DIR"
 for DRAWING in "${DRAWINGS[@]}"
 do
+    echo "Drawing $DRAWING"
     CMDS=($(cat "$EXAMPLES_DIR/$DRAWING.json" | jq -c '.commands' | sed 's/\[//g' | sed 's/\]//g' | sed 's/","/ /g' | sed 's/"//g'))
     echo "${CMDS[@]}" > serial.log
-    $DRAWER_CMD 'D9' "${CMDS[@]}" >> serial.log
+    $DRAWER_CMD "${CMDS[@]}" >> serial.log
     cp serial.log "../$DRAWING.log"
     npm run draw > /dev/null
     cp image.png "../$DRAWING.png"

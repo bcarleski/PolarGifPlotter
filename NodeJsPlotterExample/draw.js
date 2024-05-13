@@ -8,12 +8,12 @@ const enablePng = true;
 const showLineDebug = false;
 
 const csvLines = fs.readFileSync(CSV_FILE_PATH).toString("utf-8").split('\n');
-const steps = csvLines.filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('STEP: '))
+const positions = csvLines.filter(line => line.length > 0 && line.indexOf(',') > 0 && line.startsWith('POSITION: '))
                       .map(line => {
-                          const parts = line.substring(6).split(',');
-                          return {radiusStep:parseInt(parts[0]),azimuthStep:parseInt(parts[1])};
+                          const parts = line.substring(10).split(',');
+                          return {radius:parseFloat(parts[0]),azimuth:parseFloat(parts[1])};
                       });
-
+console.log("Positions: " + positions.length);
 let width = 1200;
 let height = 1200;
 let radiusStepSize = 1;
@@ -36,10 +36,10 @@ height += marbleSize;
 const polarOriginX = width / 2;
 const polarOriginY = height / 2;
 const minimumNumberOfBatchesForLargeDrawing = 40;
-const batchSize = steps.length > minimumNumberOfBatchesForLargeDrawing ? Math.floor(steps.length / minimumNumberOfBatchesForLargeDrawing) : 1;
+const batchSize = positions.length > minimumNumberOfBatchesForLargeDrawing ? Math.floor(positions.length / minimumNumberOfBatchesForLargeDrawing) : 1;
 const batchAccumulator = [];
 const batches = [];
-steps.forEach(step => {
+positions.forEach(step => {
     batchAccumulator.push(step);
     if (batchAccumulator.length == batchSize) {
         batches.push([...batchAccumulator]);
@@ -83,7 +83,6 @@ function getImage(maxBatch, debugLines) {
     const canvas = createCanvas(width, height);
     const context = canvas.getContext("2d");
     const maxRadius = Math.min(width, height) / 2;
-    var radius = 0;
 
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, width, height);
@@ -91,38 +90,22 @@ function getImage(maxBatch, debugLines) {
 
     context.strokeStyle = "#000000";
     context.lineCap = "round";
-    context.lineWidth = marbleSize;
+    context.lineWidth = marbleSize * 2 / 3;
+    context.beginPath();
+    context.moveTo(0, 0);
 
     for (let j = 0; j <= maxBatch; j++) {
         const batch = batches[j];
-        batch.forEach(step => {
-            if (step.azimuthStep == 0 && step.radiusStep == 0) {
-                return;
-            }
+        console.log("Drawing frame " + (j + 1) + " of " + batches.length + " with " + batch.length + " positions");
+        batch.forEach(position => {
+            if (position.radius === undefined || position.azimuth === undefined) return;
 
-            if (step.azimuthStep != 0) {
-                const azimuthDelta = -1 * azimuthStepSize * step.azimuthStep;
-                context.rotate(azimuthDelta);
-                context.beginPath();
-                context.arc(0, 0, Math.abs(radius), 0, -1 * azimuthDelta, azimuthDelta > 0);
-                context.stroke();
-                if (debugLines) {
-                    console.log('Rotating %f', azimuthDelta);
-                }
-            }
-            if (step.radiusStep != 0) {
-                const radiusDelta = radiusStepSize * step.radiusStep;
-                context.beginPath();
-                context.moveTo(radius, 0);
-                context.lineTo(radius + radiusDelta, 0);
-                context.stroke();
-
-                if (debugLines) {
-                    console.log('Pushing from %f to %f', radius, radius + radiusDelta);
-                }
-                radius += radiusDelta;
-            }
+            const x = position.radius * Math.cos(position.azimuth);
+            const y = position.radius * Math.sin(position.azimuth);
+            console.log("    (R: " + position.radius + ", A: " + position.azimuth + " ), (X: " + x + ", Y: " + y + " )");
+            context.lineTo(x, y);
         });
+        context.stroke();
     }
 
     context.lineWidth = 2;
