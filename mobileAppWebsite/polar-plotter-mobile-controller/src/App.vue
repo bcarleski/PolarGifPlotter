@@ -3,6 +3,7 @@ import { computed, reactive } from 'vue';
 import CalibrationPushing from './components/CalibrationPushing.vue'
 import InitializingState from './components/InitializingState.vue'
 import ManualMoving from './components/ManualMoving.vue'
+import TestMoving from './components/TestMoving.vue'
 import UnknownState from './components/UnknownState.vue'
 import WorkingState from './components/WorkingState.vue'
 
@@ -141,7 +142,7 @@ async function sendCommand(cmd: string) {
 
   data.error = ''
   data.disabled = true
-  setTimeout(() => { data.disabled = false; data.message = ''; }, 1000)
+  setTimeout(() => { data.disabled = false; data.message = ''; }, 200)
 
   try {
     data.message = 'Sending: ' + cmd
@@ -169,6 +170,9 @@ async function sendCommand(cmd: string) {
         <div>Status: {{ deviceProperties.status }}</div>
         <div v-if="deviceProperties.state === 'Initializing'">
           <InitializingState />
+        </div>
+        <div v-else-if="deviceProperties.state === 'Testing'">
+          <TestMoving :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
         </div>
         <div v-else-if="isWorkingState">
           <WorkingState :state="deviceProperties.state" :disabled="data.disabled" @send-command="sendCommand" />
