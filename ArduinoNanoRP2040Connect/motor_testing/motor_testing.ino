@@ -15,14 +15,19 @@
 #define BLE_POLL_INTERVAL 100
 #define POSITION_UPDATE_INTERVAL 500
 #define STEP_UPDATE_INTERVAL 500
-#define RADIUS_STEPPER_STEP_PIN 15
-#define RADIUS_STEPPER_DIR_PIN 16
-#define AZIMUTH_STEPPER_STEP_PIN 17
-#define AZIMUTH_STEPPER_DIR_PIN 18
-#define USE_SERIAL 0
+#define RADIUS_STEPPER_MS1_PIN 14
+#define RADIUS_STEPPER_MS2_PIN 15
+#define RADIUS_STEPPER_STEP_PIN 16
+#define RADIUS_STEPPER_DIR_PIN 17
+#define AZIMUTH_STEPPER_MS1_PIN 18
+#define AZIMUTH_STEPPER_MS2_PIN 19
+#define AZIMUTH_STEPPER_STEP_PIN 20
+#define AZIMUTH_STEPPER_DIR_PIN 21
+#define USE_SERIAL 1
 
 #include <ArduinoBLE.h>
 #include <AccelStepper.h>
+#include <WiFiNINA.h>
 
 unsigned long currentStepTime = 0;
 unsigned long nextStepUpdateTime = 0;
@@ -30,6 +35,7 @@ unsigned long nextPositionUpdateTime = 0;
 unsigned long nextBlePollTime = 0;
 bool adjustingAzimuth = false;
 
+WiFiClient wifiClient;
 BLEService bleService(BLE_SERVICE_UUID);
 BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
 BLEDoubleCharacteristic bleMaxRadius(BLE_MAX_RADIUS_UUID, BLERead | BLENotify);
@@ -60,6 +66,20 @@ void setup() {
   if (Serial) Serial.println("Starting");
 #endif
   delay(2000);
+  if (WiFi.begin("SSID", "password") == WL_CONNECTED) {
+    if (Serial) Serial.println("WIFI Connected to BKNBOYZ");
+    delay(2000);
+    if (Serial) Serial.println("WIFI Disconnected");
+    WiFi.end();
+    delay(2000);
+  } else {
+    if (Serial) Serial.println("WIFI Could not connect to BKNBOYZ");
+  }
+
+  pinMode(RADIUS_STEPPER_MS1_PIN, OUTPUT);
+  pinMode(RADIUS_STEPPER_MS2_PIN, OUTPUT);
+  pinMode(AZIMUTH_STEPPER_MS1_PIN, OUTPUT);
+  pinMode(AZIMUTH_STEPPER_MS2_PIN, OUTPUT);
   bleInitialize(true);
 
   // add the characteristic to the service
@@ -83,7 +103,7 @@ void setup() {
   setCurrentCommand("-");
   setCurrentStep(0);
   setPosition(0, 0);
-  setState("Manual");
+  setState("Testing");
   bleService.addCharacteristic(bleCommand);
   BLE.addService(bleService);
   BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
@@ -150,6 +170,12 @@ void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
 #endif
 
   const char chr = command.charAt(0);
+  int accel = 0;
+  int speed = 0;
+  int microstep = 0;
+  int ms1 = LOW;
+  int ms2 = LOW;
+
   switch (chr)
   {
     case 'A': // Manual Azimuth
@@ -180,8 +206,8 @@ void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
       break;
     case 'O': // Offset
     case 'o':
-      int accel = command.substring(1).toInt();
-      int speed = accel * 4;
+      accel = command.substring(1).toInt();
+      speed = accel * 4;
 #if USE_SERIAL > 0
       if (Serial) Serial.print("Adjusting to ");
       if (Serial) Serial.println(speed);
@@ -192,6 +218,23 @@ void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
       } else {
         azimuthStepper.setMaxSpeed(speed);
         azimuthStepper.setAcceleration(accel);
+      }
+      break;
+    case 'M': // Microstep
+    case 'm':
+      microstep = command.substring(1).toInt();
+#if USE_SERIAL > 0
+      if (Serial) Serial.print("Setting microsteps to ");
+      if (Serial) Serial.println(microstep);
+#endif
+      ms1 = microstep == 1 || microstep == 3 ? HIGH : LOW;
+      ms2 = microstep == 2 || microstep == 3 ? HIGH : LOW;
+      if (!adjustingAzimuth) {
+        digitalWrite(RADIUS_STEPPER_MS1_PIN, ms1);
+        digitalWrite(RADIUS_STEPPER_MS2_PIN, ms2);
+      } else {
+        digitalWrite(AZIMUTH_STEPPER_MS1_PIN, ms1);
+        digitalWrite(AZIMUTH_STEPPER_MS2_PIN, ms2);
       }
       break;
   }
