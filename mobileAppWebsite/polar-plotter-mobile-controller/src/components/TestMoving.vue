@@ -11,6 +11,12 @@ import { reactive } from 'vue';
 
 <template>
   <div>
+    <button @click="emit('sendCommand', 'M0')" :disabled="disabled">M0</button>
+    <button @click="emit('sendCommand', 'M1')" :disabled="disabled">M1</button>
+    <button @click="emit('sendCommand', 'M2')" :disabled="disabled">M2</button>
+    <button @click="emit('sendCommand', 'M3')" :disabled="disabled">M3</button>
+  </div>
+  <div>
     <input type="number" v-model="data.amount" />
     <button @click="emit('sendCommand', 'O' + data.amount)" :disabled="disabled">Update Amount</button>
   </div>
