@@ -21,8 +21,8 @@ import { reactive } from 'vue';
     <button @click="emit('sendCommand', 'O' + data.amount)" :disabled="disabled">Update Amount</button>
   </div>
   <div>
-    <button @click="emit('sendCommand', 'A')" v-if="state == 'Manual Radius'" :disabled="disabled">Switch to Azimuth</button>
-    <button @click="emit('sendCommand', 'R')" v-else :disabled="disabled">Switch to Radius</button>
+    <button @click="emit('sendCommand', 'A')" :disabled="disabled">Switch to Azimuth</button>
+    <button @click="emit('sendCommand', 'R')" :disabled="disabled">Switch to Radius</button>
   </div>
   <div>
     <button @click="emit('sendCommand', 'X')" :disabled="disabled">Move to Center</button>
