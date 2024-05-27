@@ -27,12 +27,17 @@
 
 #include <ArduinoBLE.h>
 #include <AccelStepper.h>
+#include <MultiStepper.h>
 #include <WiFiNINA.h>
+
+const uint8_t REPLY_DELAY = 4;
+const long SERIAL_BAUD_RATE = 115200;
 
 unsigned long currentStepTime = 0;
 unsigned long nextStepUpdateTime = 0;
 unsigned long nextPositionUpdateTime = 0;
 unsigned long nextBlePollTime = 0;
+long stepLimit = 20000;
 bool adjustingAzimuth = false;
 
 WiFiClient wifiClient;
@@ -52,6 +57,7 @@ BLEStringCharacteristic bleState(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING
 
 AccelStepper radiusStepper(AccelStepper::DRIVER, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
 AccelStepper azimuthStepper(AccelStepper::DRIVER, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
+MultiStepper multiStepper;
 
 
 void setup() {
@@ -66,14 +72,15 @@ void setup() {
   if (Serial) Serial.println("Starting");
 #endif
   delay(2000);
+
   if (WiFi.begin("SSID", "password") == WL_CONNECTED) {
-    if (Serial) Serial.println("WIFI Connected to BKNBOYZ");
+    if (Serial) Serial.println("WIFI Connected");
     delay(2000);
     if (Serial) Serial.println("WIFI Disconnected");
     WiFi.end();
     delay(2000);
   } else {
-    if (Serial) Serial.println("WIFI Could not connect to BKNBOYZ");
+    if (Serial) Serial.println("WIFI Could not connect");
   }
 
   pinMode(RADIUS_STEPPER_MS1_PIN, OUTPUT);
@@ -113,11 +120,14 @@ void setup() {
 
   bleAdvertise();
 
-  radiusStepper.setMaxSpeed(300);
-  radiusStepper.setAcceleration(100);
+  radiusStepper.setMaxSpeed(2000);
+  radiusStepper.setAcceleration(1000);
 
-  azimuthStepper.setMaxSpeed(300);
-  azimuthStepper.setAcceleration(100);
+  azimuthStepper.setMaxSpeed(2000);
+  azimuthStepper.setAcceleration(1000);
+
+  multiStepper.addStepper(radiusStepper);
+  multiStepper.addStepper(azimuthStepper);
 
   delay(2000);
 
@@ -128,16 +138,28 @@ void setup() {
 }
 
 void loop() {
-  if (radiusStepper.distanceToGo() == 0 && radiusStepper.currentPosition() != 0) radiusStepper.moveTo(-radiusStepper.currentPosition());
-  if (azimuthStepper.distanceToGo() == 0 && azimuthStepper.currentPosition() != 0) azimuthStepper.moveTo(-azimuthStepper.currentPosition());
+  if (radiusStepper.distanceToGo() == 0 && radiusStepper.currentPosition() != 0 && azimuthStepper.distanceToGo() == 0 && azimuthStepper.currentPosition() != 0) {
+    long positions[2];
+    positions[0] = -radiusStepper.currentPosition();
+    positions[1] = -azimuthStepper.currentPosition();
+    multiStepper.moveTo(positions);
+  }
 
-  radiusStepper.run();
-  azimuthStepper.run();
+  multiStepper.run();
 
   currentStepTime = millis();
 
+  setPosition(radiusStepper.currentPosition(), azimuthStepper.currentPosition());
+
   if (nextBlePollTime <= currentStepTime)  {
     BLE.poll();
+    
+#if USE_SERIAL > 0
+    if (Serial && Serial.available()) {
+      String command = Serial.readStringUntil('\n');
+      handleCommand(command);
+    }
+#endif
     nextBlePollTime = currentStepTime + BLE_POLL_INTERVAL;
   }
 }
@@ -169,56 +191,63 @@ void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
   if (Serial) Serial.println("Got new command from BLE: " + command);
 #endif
 
+  handleCommand(command);
+}
+
+void handleCommand(const String& command) {
   const char chr = command.charAt(0);
   int accel = 0;
   int speed = 0;
   int microstep = 0;
+  int limit = 0;
   int ms1 = LOW;
   int ms2 = LOW;
+  long positions[2];
+  positions[0] = stepLimit;
+  positions[1] = stepLimit;
 
+  setCurrentCommand(command);
   switch (chr)
   {
-    case 'A': // Manual Azimuth
-    case 'a':
-#if USE_SERIAL > 0
-      if (Serial) Serial.println("Switching to azimuth");
-#endif
-      adjustingAzimuth = true;
-      radiusStepper.moveTo(0);
-      azimuthStepper.moveTo(20000);
-      break;
-    case 'R': // Manual Radius
-    case 'r':
-#if USE_SERIAL > 0
-      if (Serial) Serial.println("Switching to radius");
-#endif
-      adjustingAzimuth = false;
-      radiusStepper.moveTo(20000);
-      azimuthStepper.moveTo(0);
-      break;
     case 'X': // Manual Radius
     case 'x':
 #if USE_SERIAL > 0
       if (Serial) Serial.println("Stopping");
 #endif
-      radiusStepper.moveTo(0);
-      azimuthStepper.moveTo(0);
+      positions[0] = 0;
+      positions[1] = 0;
+      multiStepper.moveTo(positions);
       break;
     case 'O': // Offset
     case 'o':
-      accel = command.substring(1).toInt();
-      speed = accel * 4;
+      speed = command.substring(1).toInt();
 #if USE_SERIAL > 0
       if (Serial) Serial.print("Adjusting to ");
       if (Serial) Serial.println(speed);
 #endif
-      if (!adjustingAzimuth) {
-        radiusStepper.setMaxSpeed(speed);
-        radiusStepper.setAcceleration(accel);
-      } else {
-        azimuthStepper.setMaxSpeed(speed);
-        azimuthStepper.setAcceleration(accel);
-      }
+      multiStepper.runSpeedToPosition();
+      setRadiusStepSize(speed);
+      radiusStepper.setMaxSpeed(speed);
+      setAzimuthStepSize(speed);
+      azimuthStepper.setMaxSpeed(speed);
+
+      positions[0] = -radiusStepper.currentPosition();
+      positions[1] = -azimuthStepper.currentPosition();
+      multiStepper.moveTo(positions);
+      break;
+    case 'L': // Limit
+    case 'l':
+      limit = command.substring(1).toInt();
+#if USE_SERIAL > 0
+      if (Serial) Serial.print("Setting limit to ");
+      if (Serial) Serial.println(limit);
+#endif
+      if (limit < 1) limit = 1;
+      else if (limit > 1000000) limit = 1000000;
+      stepLimit = limit;
+      positions[0] = limit;
+      positions[1] = limit;
+      multiStepper.moveTo(positions);
       break;
     case 'M': // Microstep
     case 'm':
@@ -229,6 +258,7 @@ void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
 #endif
       ms1 = microstep == 1 || microstep == 3 ? HIGH : LOW;
       ms2 = microstep == 2 || microstep == 3 ? HIGH : LOW;
+      setCurrentStep(microstep);
       if (!adjustingAzimuth) {
         digitalWrite(RADIUS_STEPPER_MS1_PIN, ms1);
         digitalWrite(RADIUS_STEPPER_MS2_PIN, ms2);

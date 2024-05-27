@@ -5,7 +5,9 @@ import { reactive } from 'vue';
     (e:'sendCommand', command: string): void
   }>()
   const data = reactive({
-    amount: 1000
+    amount: 1000,
+    limit: 20000,
+    speed: 2000
   })
 </script>
 
@@ -17,12 +19,12 @@ import { reactive } from 'vue';
     <button @click="emit('sendCommand', 'M3')" :disabled="disabled">M3</button>
   </div>
   <div>
-    <input type="number" v-model="data.amount" />
-    <button @click="emit('sendCommand', 'O' + data.amount)" :disabled="disabled">Update Amount</button>
+    <input type="number" v-model="data.limit" />
+    <button @click="emit('sendCommand', 'L' + data.limit)" :disabled="disabled">Update Limit</button>
   </div>
   <div>
-    <button @click="emit('sendCommand', 'A')" :disabled="disabled">Switch to Azimuth</button>
-    <button @click="emit('sendCommand', 'R')" :disabled="disabled">Switch to Radius</button>
+    <input type="number" v-model="data.amount" />
+    <button @click="emit('sendCommand', 'O' + data.amount)" :disabled="disabled">Update Max Speed</button>
   </div>
   <div>
     <button @click="emit('sendCommand', 'X')" :disabled="disabled">Move to Center</button>
