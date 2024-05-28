@@ -5,7 +5,8 @@
 #include "safePrinter.h"
 #include "safeStatus.h"
 
-#include <Stepper.h>
+#include <AccelStepper.h>
+#include <MultiStepper.h>
 
 #if USE_CLOUD > 0
 #include <WiFiNINA.h>
@@ -43,27 +44,22 @@ const char* radiusStepSizeKey = "DynamicSand.RadiusStepSize";
 const char* azimuthStepSizeKey = "DynamicSand.AzimuthStepSize";
 SafePrinter printer;
 
-Stepper radiusStepper(RADIUS_STEPPER_STEPS_PER_ROTATION, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
-Stepper azimuthStepper(AZIMUTH_STEPPER_STEPS_PER_ROTATION, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
+AccelStepper radiusStepper(AccelStepper::DRIVER, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
+AccelStepper azimuthStepper(AccelStepper::DRIVER, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
 PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps);
+MultiStepper multiStepper;
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
-unsigned long waitingEndsAt = 0;
+unsigned long nextWifiCheckTime = 0;
+unsigned long currentMillis = 0;
+unsigned long nextInputCheckTime = 0;
 bool bleInitialized = false;
 bool bleAdvertising = false;
-
-enum LoopState {
-  CYCLING,
-  WAITING_WIFI,
-  WAITING_STEP
-};
-LoopState loopState;
 
 void setup() {
   printer.init();
   delay(2000);
-  loopState = CYCLING;
 
   bleInitialize(true);
 
@@ -72,9 +68,11 @@ void setup() {
   printer.println("Starting Setup");
   status.status("START SETUP");
 
-  radiusStepper.setSpeed(RADIUS_RPMS * RADIUS_STEP_MULTIPLIER);
-  azimuthStepper.setSpeed(AZIMUTH_RPMS * AZIMUTH_STEP_MULTIPLIER);
-  plotter.onStep(performStep);
+  radiusStepper.setMaxSpeed(RADIUS_SLOW_SPEED);
+  azimuthStepper.setMaxSpeed(AZIMUTH_SLOW_SPEED);
+  multiStepper.addStepper(radiusStepper);
+  multiStepper.addStepper(azimuthStepper);
+  plotter.onMoveTo(performMoveTo);
   plotter.onRecalibrate(performRecalibrate);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
@@ -110,20 +108,23 @@ void setup() {
 }
 
 void loop() {
-  handleSerialInput();
+  // multiStepper.run();
+  currentMillis = millis();
+
+  if (currentMillis >= nextInputCheckTime) {
+    handleSerialInput();
 #if USE_BLE > 0
-  BLE.poll();
+    BLE.poll();
 #endif
-  if (loopState == WAITING_STEP) {
-    if (millis() < waitingEndsAt) return;
-    loopState = CYCLING;
+
+    currentMillis = millis();
+    nextInputCheckTime = currentMillis + INPUT_CHECK_WAIT_TIME;
   }
+
+  if (radiusStepper.distanceToGo() != 0 || azimuthStepper.distanceToGo() != 0) return;
 
   if (plotter.canCycle()) {
     plotter.performCycle();
-    if (plotter.isPaused()) {
-      delay(200);
-    }
   } else {
 #if USE_CLOUD > 0
     getCommands();
@@ -195,7 +196,12 @@ void bleDestroy() {
   bleInitialized = false;
 }
 
-void performStep(const int radiusSteps, const int azimuthSteps, const bool fastStep) {
+void performMoveTo(const long radiusSteps, const long azimuthSteps, const bool fastStep) {
+  long position[2];
+
+  radiusStepper.setMaxSpeed(fastStep ? RADIUS_FAST_SPEED : RADIUS_SLOW_SPEED);
+  azimuthStepper.setMaxSpeed(fastStep ? AZIMUTH_FAST_SPEED : AZIMUTH_SLOW_SPEED);
+
   // Because of how my arm is configured, an azimuth step results in a slight radius step
   // that we need to offset and account for
   int rSteps = radiusSteps;
@@ -209,13 +215,10 @@ void performStep(const int radiusSteps, const int azimuthSteps, const bool fastS
     }
   }
 
-  if (!fastStep) {
-    waitingEndsAt = millis() + MINIMUM_STEP_DELAY_MILLIS;
-    loopState = WAITING_STEP;
-  }
+  position[0] = radiusStepper.currentPosition() + rSteps * RADIUS_STEP_MULTIPLIER;
+  position[1] = azimuthStepper.currentPosition() + azimuthSteps * AZIMUTH_STEP_MULTIPLIER;
 
-  radiusStepper.step(rSteps * RADIUS_STEP_MULTIPLIER);
-  azimuthStepper.step(azimuthSteps * AZIMUTH_STEP_MULTIPLIER);
+  multiStepper.moveTo(position);
 }
 
 void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSteps) {
@@ -281,10 +284,7 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
 
 #if USE_CLOUD > 0
 void getCommands() {
-  if (loopState == WAITING_WIFI) {
-    if (millis() < waitingEndsAt) return;
-    loopState = CYCLING;
-  }
+  if (currentMillis < nextWifiCheckTime) return;
 
   if (backoffDelay == INITIAL_BACKOFF_DELAY_MILLIS) {
     status.save();
@@ -298,8 +298,7 @@ void getCommands() {
 }
 
 void doBackoffDelay() {
-  waitingEndsAt = millis() + backoffDelay;
-  loopState = WAITING_WIFI;
+  nextWifiCheckTime = currentMillis + backoffDelay;
 
   if (Serial) {
     Serial.print("Waiting ");

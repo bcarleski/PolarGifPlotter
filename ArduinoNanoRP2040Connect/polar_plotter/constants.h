@@ -5,6 +5,8 @@
 #define USE_BLE 1
 #define USE_CLOUD 0
 
+#define INPUT_CHECK_WAIT_TIME 200UL
+
 #define BLE_DEVICE_NAME "Dynamic_Sand_Arduino"
 #define BLE_SERVICE_UUID "45aa5c8f-c47e-42f6-af4a-66544b8aff17"
 #define BLE_STATUS_UUID "52eb19a4-6421-4910-a8ca-7ff75ef2f56b"
@@ -33,19 +35,21 @@
 #define LCD_D7 5
 
 #define RADIUS_STEPPER_STEPS_PER_ROTATION 1600
-#define RADIUS_STEPPER_STEP_PIN 15
-#define RADIUS_STEPPER_DIR_PIN 16
+#define RADIUS_STEPPER_STEP_PIN 16
+#define RADIUS_STEPPER_DIR_PIN 17
 #define RADIUS_GEAR_RATIO 3.0                  // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
 #define RADIUS_ROTATIONS_TO_MAX_RADIUS 1.0     // the number of complete turns of the drive gear that it takes to go from the center to the maximum radius
-#define RADIUS_RPMS 30                         // The maximum speed the Radius motor should ever turn, in RPMs
-#define RADIUS_STEP_MULTIPLIER 4
+#define RADIUS_FAST_SPEED 18000                 // The maximum speed the Radius motor should ever turn, in steps per second
+#define RADIUS_SLOW_SPEED 2000                  // The maximum speed the Radius motor should ever turn, in steps per second
+#define RADIUS_STEP_MULTIPLIER 16
 
 #define AZIMUTH_STEPPER_STEPS_PER_ROTATION 1600
-#define AZIMUTH_STEPPER_STEP_PIN 17
-#define AZIMUTH_STEPPER_DIR_PIN 18
+#define AZIMUTH_STEPPER_STEP_PIN 18
+#define AZIMUTH_STEPPER_DIR_PIN 19
 #define AZIMUTH_GEAR_RATIO 3.0                 // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
-#define AZIMUTH_RPMS 30                        // The maximum speed the Azimuth motor should ever turn, in RPMs
-#define AZIMUTH_STEP_MULTIPLIER 4
+#define AZIMUTH_FAST_SPEED 18000                // The maximum speed the Radius motor should ever turn, in steps per second
+#define AZIMUTH_SLOW_SPEED 2000                 // The maximum speed the Radius motor should ever turn, in steps per second
+#define AZIMUTH_STEP_MULTIPLIER 16
 
 #define MAX_RADIUS 1000
 #define RADIUS_STEP_SIZE MAX_RADIUS / RADIUS_ROTATIONS_TO_MAX_RADIUS / RADIUS_STEPPER_STEPS_PER_ROTATION / RADIUS_GEAR_RATIO

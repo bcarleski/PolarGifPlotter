@@ -18,7 +18,7 @@ const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSi
   currentStep: 'Unknown',
   radius: 0,
   azimuth: 0,
-  state: 'Initializing',
+  state: 'Unknown',
   status: '',
   sendCmd: undefined
 })
@@ -53,6 +53,7 @@ const azimuthDegrees = computed(() => {
 
 function clearDevice(evt: Event) {
   data.device = undefined
+  deviceProperties.state = 'Unknown'
 }
 
 function updateProperty(target: BluetoothRemoteGATTCharacteristic | undefined, setProperty: (value: DataView | undefined) => void) {
@@ -94,6 +95,7 @@ async function requestDevice() {
       filters: [{ name: 'Dynamic_Sand_Arduino' }],
       optionalServices: ['45aa5c8f-c47e-42f6-af4a-66544b8aff17']
     })
+    deviceProperties.state = 'Unknown'
 
     const dv = data.device
     data.message = 'Got device ' + dv.name + ' (' + dv.id + ')'

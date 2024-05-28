@@ -15,20 +15,19 @@
 #define BLE_POLL_INTERVAL 100
 #define POSITION_UPDATE_INTERVAL 500
 #define STEP_UPDATE_INTERVAL 500
-#define RADIUS_STEPPER_MS1_PIN 14
-#define RADIUS_STEPPER_MS2_PIN 15
+#define STEPPER_MS1_PIN 14
+#define STEPPER_MS2_PIN 15
 #define RADIUS_STEPPER_STEP_PIN 16
 #define RADIUS_STEPPER_DIR_PIN 17
-#define AZIMUTH_STEPPER_MS1_PIN 18
-#define AZIMUTH_STEPPER_MS2_PIN 19
-#define AZIMUTH_STEPPER_STEP_PIN 20
-#define AZIMUTH_STEPPER_DIR_PIN 21
+#define AZIMUTH_STEPPER_STEP_PIN 18
+#define AZIMUTH_STEPPER_DIR_PIN 19
 #define USE_SERIAL 1
 
 #include <ArduinoBLE.h>
 #include <AccelStepper.h>
 #include <MultiStepper.h>
 #include <WiFiNINA.h>
+#include <TMC2209.h>
 
 const uint8_t REPLY_DELAY = 4;
 const long SERIAL_BAUD_RATE = 115200;
@@ -59,6 +58,10 @@ AccelStepper radiusStepper(AccelStepper::DRIVER, RADIUS_STEPPER_STEP_PIN, RADIUS
 AccelStepper azimuthStepper(AccelStepper::DRIVER, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
 MultiStepper multiStepper;
 
+HardwareSerial & uartSerial = Serial1;
+TMC2209 radiusDriver;
+TMC2209 azimuthDriver;
+
 
 void setup() {
 #if USE_SERIAL > 0
@@ -83,10 +86,14 @@ void setup() {
     if (Serial) Serial.println("WIFI Could not connect");
   }
 
-  pinMode(RADIUS_STEPPER_MS1_PIN, OUTPUT);
-  pinMode(RADIUS_STEPPER_MS2_PIN, OUTPUT);
-  pinMode(AZIMUTH_STEPPER_MS1_PIN, OUTPUT);
-  pinMode(AZIMUTH_STEPPER_MS2_PIN, OUTPUT);
+  radiusDriver.setup(uartSerial, SERIAL_BAUD_RATE, TMC2209::SERIAL_ADDRESS_0);
+  radiusDriver.setReplyDelay(REPLY_DELAY);
+  radiusDriver.enable();
+  azimuthDriver.setup(uartSerial, SERIAL_BAUD_RATE, TMC2209::SERIAL_ADDRESS_1);
+  azimuthDriver.setReplyDelay(REPLY_DELAY);
+  azimuthDriver.enable();
+  pinMode(STEPPER_MS1_PIN, OUTPUT);
+  pinMode(STEPPER_MS2_PIN, OUTPUT);
   bleInitialize(true);
 
   // add the characteristic to the service
@@ -259,13 +266,8 @@ void handleCommand(const String& command) {
       ms1 = microstep == 1 || microstep == 3 ? HIGH : LOW;
       ms2 = microstep == 2 || microstep == 3 ? HIGH : LOW;
       setCurrentStep(microstep);
-      if (!adjustingAzimuth) {
-        digitalWrite(RADIUS_STEPPER_MS1_PIN, ms1);
-        digitalWrite(RADIUS_STEPPER_MS2_PIN, ms2);
-      } else {
-        digitalWrite(AZIMUTH_STEPPER_MS1_PIN, ms1);
-        digitalWrite(AZIMUTH_STEPPER_MS2_PIN, ms2);
-      }
+      digitalWrite(STEPPER_MS1_PIN, ms1);
+      digitalWrite(STEPPER_MS2_PIN, ms2);
       break;
   }
 }
