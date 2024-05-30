@@ -12,22 +12,23 @@
 #define BLE_AZIMUTH_UUID "eb654acc-3430-45e3-8dc9-22c9fe982518"
 #define BLE_STATE_UUID "ec314ea1-7426-47fb-825c-8fbd8b02f7fe"
 #define BLE_STRING_SIZE 512
-#define BLE_POLL_INTERVAL 100
-#define POSITION_UPDATE_INTERVAL 500
-#define STEP_UPDATE_INTERVAL 500
-#define STEPPER_MS1_PIN 14
-#define STEPPER_MS2_PIN 15
-#define RADIUS_STEPPER_STEP_PIN 16
-#define RADIUS_STEPPER_DIR_PIN 17
-#define AZIMUTH_STEPPER_STEP_PIN 18
-#define AZIMUTH_STEPPER_DIR_PIN 19
-#define USE_SERIAL 1
+#define SERIAL_POLL_INTERVAL 2000000UL
+#define POSITION_UPDATE_INTERVAL 2000
+#define STEP_UPDATE_INTERVAL 2000
+// #define STEPPER_MS1_PIN 14
+// #define STEPPER_MS2_PIN 15
+// #define RADIUS_STEPPER_STEP_PIN 16
+// #define RADIUS_STEPPER_DIR_PIN 17
+// #define AZIMUTH_STEPPER_STEP_PIN 18
+// #define AZIMUTH_STEPPER_DIR_PIN 19
+#define MS1_PIN 14
+#define MS2_PIN 15
+#define STEP_PIN 16
+#define DIR_PIN 17
+#define FAST_OFFSET 110  // LOW, LOW, 110
+#define SLOW_OFFSET 550  // LOW, HIGH, 550
 
-#include <ArduinoBLE.h>
-#include <AccelStepper.h>
-#include <MultiStepper.h>
-#include <WiFiNINA.h>
-#include <TMC2209.h>
+#include <TMCStepper.h>
 
 const uint8_t REPLY_DELAY = 4;
 const long SERIAL_BAUD_RATE = 115200;
@@ -35,36 +36,25 @@ const long SERIAL_BAUD_RATE = 115200;
 unsigned long currentStepTime = 0;
 unsigned long nextStepUpdateTime = 0;
 unsigned long nextPositionUpdateTime = 0;
-unsigned long nextBlePollTime = 0;
+unsigned long nextSerialPollTime = 0;
+unsigned long nextStepTime = 0;
+unsigned long nextStepTimeOffset = SLOW_OFFSET;
+unsigned long currentStep = 0;
 long stepLimit = 20000;
+long stepNumber = 0;
 bool adjustingAzimuth = false;
+bool running = false;
+bool reverse = false;
 
-WiFiClient wifiClient;
-BLEService bleService(BLE_SERVICE_UUID);
-BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
-BLEDoubleCharacteristic bleMaxRadius(BLE_MAX_RADIUS_UUID, BLERead | BLENotify);
-BLEDoubleCharacteristic bleRadiusStepSize(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify);
-BLEDoubleCharacteristic bleAzimuthStepSize(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify);
-BLEIntCharacteristic bleMarbleSize(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify);
-BLEStringCharacteristic bleStatus(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
-BLEStringCharacteristic bleDrawing(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
-BLEStringCharacteristic bleDrawingCommand(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
-BLEIntCharacteristic bleStep(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify);
-BLEDoubleCharacteristic bleRadius(BLE_RADIUS_UUID, BLERead | BLENotify);
-BLEDoubleCharacteristic bleAzimuth(BLE_AZIMUTH_UUID, BLERead | BLENotify);
-BLEStringCharacteristic bleState(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
-
-AccelStepper radiusStepper(AccelStepper::DRIVER, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
-AccelStepper azimuthStepper(AccelStepper::DRIVER, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
-MultiStepper multiStepper;
-
-HardwareSerial & uartSerial = Serial1;
-TMC2209 radiusDriver;
-TMC2209 azimuthDriver;
-
+TMC2209Stepper driver(&Serial1, 0.11f, 0b00);
 
 void setup() {
-#if USE_SERIAL > 0
+  pinMode(MS1_PIN, OUTPUT);
+  pinMode(MS2_PIN, OUTPUT);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(DIR_PIN, OUTPUT);
+
+  Serial1.begin(115200);
   Serial.begin(115200);
   unsigned long start = millis();
 
@@ -73,298 +63,171 @@ void setup() {
     ;
 
   if (Serial) Serial.println("Starting");
-#endif
-  delay(2000);
-
-  if (WiFi.begin("SSID", "password") == WL_CONNECTED) {
-    if (Serial) Serial.println("WIFI Connected");
-    delay(2000);
-    if (Serial) Serial.println("WIFI Disconnected");
-    WiFi.end();
-    delay(2000);
-  } else {
-    if (Serial) Serial.println("WIFI Could not connect");
-  }
-
-  radiusDriver.setup(uartSerial, SERIAL_BAUD_RATE, TMC2209::SERIAL_ADDRESS_0);
-  radiusDriver.setReplyDelay(REPLY_DELAY);
-  radiusDriver.enable();
-  azimuthDriver.setup(uartSerial, SERIAL_BAUD_RATE, TMC2209::SERIAL_ADDRESS_1);
-  azimuthDriver.setReplyDelay(REPLY_DELAY);
-  azimuthDriver.enable();
-  pinMode(STEPPER_MS1_PIN, OUTPUT);
-  pinMode(STEPPER_MS2_PIN, OUTPUT);
-  bleInitialize(true);
-
-  // add the characteristic to the service
-  bleService.addCharacteristic(bleMaxRadius);
-  bleService.addCharacteristic(bleRadiusStepSize);
-  bleService.addCharacteristic(bleAzimuthStepSize);
-  bleService.addCharacteristic(bleMarbleSize);
-  bleService.addCharacteristic(bleStatus);
-  bleService.addCharacteristic(bleDrawing);
-  bleService.addCharacteristic(bleDrawingCommand);
-  bleService.addCharacteristic(bleStep);
-  bleService.addCharacteristic(bleRadius);
-  bleService.addCharacteristic(bleAzimuth);
-  bleService.addCharacteristic(bleState);
-
-  setMaxRadius(10500);
-  setMarbleSizeInRadiusSteps(650);
-  setRadiusStepSize(0.0);
-  setAzimuthStepSize(0.0);
-  setCurrentDrawing("-");
-  setCurrentCommand("-");
-  setCurrentStep(0);
-  setPosition(0, 0);
-  setState("Testing");
-  bleService.addCharacteristic(bleCommand);
-  BLE.addService(bleService);
-  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
-  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
-  bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
-  bleCommand.setValue("");
-
-  bleAdvertise();
-
-  radiusStepper.setMaxSpeed(2000);
-  radiusStepper.setAcceleration(1000);
-
-  azimuthStepper.setMaxSpeed(2000);
-  azimuthStepper.setAcceleration(1000);
-
-  multiStepper.addStepper(radiusStepper);
-  multiStepper.addStepper(azimuthStepper);
 
   delay(2000);
 
-#if USE_SERIAL > 0
+  digitalWrite(MS1_PIN, LOW);
+  digitalWrite(MS2_PIN, LOW);
+  digitalWrite(STEP_PIN, LOW);
+  digitalWrite(DIR_PIN, LOW);
+  driver.begin();
+  driver.toff(5);
+  driver.rms_current(600);
+  driver.microsteps(2);
+  driver.pwm_autoscale(true);
+  driver.en_spreadCycle(true);
+  driver.intpol(true);
+
+  delay(2000);
+
   if (Serial) Serial.println("Finished Setup");
-#endif
-  writeStatus("FINISHED SETUP", "");
 }
 
 void loop() {
-  if (radiusStepper.distanceToGo() == 0 && radiusStepper.currentPosition() != 0 && azimuthStepper.distanceToGo() == 0 && azimuthStepper.currentPosition() != 0) {
-    long positions[2];
-    positions[0] = -radiusStepper.currentPosition();
-    positions[1] = -azimuthStepper.currentPosition();
-    multiStepper.moveTo(positions);
+  currentStepTime = micros();
+
+  if (running) {
+    if (currentStepTime >= nextStepTime) {
+      nextStepTime = currentStepTime + nextStepTimeOffset;
+      currentStep++;
+      if ((currentStep % stepLimit) == 0) {
+        reverse = !reverse;
+        driver.shaft(reverse);
+        delayMicroseconds(4);
+      }
+
+      digitalWrite(STEP_PIN, HIGH);
+      delayMicroseconds(2);
+      digitalWrite(STEP_PIN, LOW);
+      delayMicroseconds(2);
+    }
   }
 
-  multiStepper.run();
+  if (nextSerialPollTime <= currentStepTime) {
+    // BLE.poll();
 
-  currentStepTime = millis();
-
-  setPosition(radiusStepper.currentPosition(), azimuthStepper.currentPosition());
-
-  if (nextBlePollTime <= currentStepTime)  {
-    BLE.poll();
-    
-#if USE_SERIAL > 0
     if (Serial && Serial.available()) {
       String command = Serial.readStringUntil('\n');
       handleCommand(command);
     }
-#endif
-    nextBlePollTime = currentStepTime + BLE_POLL_INTERVAL;
+    nextSerialPollTime = currentStepTime + SERIAL_POLL_INTERVAL;
   }
-}
-void bleInitialize(bool holdOnFailure) {
-#if USE_SERIAL > 0
-  if (Serial) Serial.println("Starting BLE");
-#endif
-
-  int bleBegin = BLE.begin();
-  if (!bleBegin) {
-#if USE_SERIAL > 0
-    if (Serial) {
-      Serial.print(" BLE Start failed - ");
-      Serial.println(bleBegin);
-    }
-#endif
-
-    while (holdOnFailure);
-  } else {
-    // set advertised local name and service UUID:
-    BLE.setLocalName(BLE_DEVICE_NAME);
-    BLE.setAdvertisedService(bleService);
-  }
-}
-
-void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
-  String command = bleCommand.value();
-#if USE_SERIAL > 0
-  if (Serial) Serial.println("Got new command from BLE: " + command);
-#endif
-
-  handleCommand(command);
 }
 
 void handleCommand(const String& command) {
   const char chr = command.charAt(0);
-  int accel = 0;
-  int speed = 0;
   int microstep = 0;
-  int limit = 0;
-  int ms1 = LOW;
-  int ms2 = LOW;
-  long positions[2];
-  positions[0] = stepLimit;
-  positions[1] = stepLimit;
 
-  setCurrentCommand(command);
-  switch (chr)
-  {
-    case 'X': // Manual Radius
+  switch (chr) {
+    case 'X':  // Stopping
     case 'x':
-#if USE_SERIAL > 0
       if (Serial) Serial.println("Stopping");
-#endif
-      positions[0] = 0;
-      positions[1] = 0;
-      multiStepper.moveTo(positions);
+      running = false;
       break;
-    case 'O': // Offset
+    case 'O':  // Offset
     case 'o':
-      speed = command.substring(1).toInt();
-#if USE_SERIAL > 0
-      if (Serial) Serial.print("Adjusting to ");
-      if (Serial) Serial.println(speed);
-#endif
-      multiStepper.runSpeedToPosition();
-      setRadiusStepSize(speed);
-      radiusStepper.setMaxSpeed(speed);
-      setAzimuthStepSize(speed);
-      azimuthStepper.setMaxSpeed(speed);
-
-      positions[0] = -radiusStepper.currentPosition();
-      positions[1] = -azimuthStepper.currentPosition();
-      multiStepper.moveTo(positions);
+      nextStepTimeOffset = command.substring(1).toInt();
+      if (Serial) Serial.print("Setting offset to ");
+      if (Serial) Serial.println(nextStepTimeOffset);
+      if (nextStepTimeOffset < 20) nextStepTimeOffset = 20;
+      else if (nextStepTimeOffset > 10000000) nextStepTimeOffset = 10000000;
+      running = true;
+      break;
+    case 'D':  // Switch direction
+    case 'd':
+      reverse = !reverse;
+      if (Serial) Serial.print("Switching direction - ");
+      if (Serial) Serial.println(reverse);
+      driver.shaft(reverse);
+      delayMicroseconds(4);
+      running = true;
       break;
     case 'L': // Limit
     case 'l':
-      limit = command.substring(1).toInt();
-#if USE_SERIAL > 0
+      stepLimit = command.substring(1).toInt();
       if (Serial) Serial.print("Setting limit to ");
-      if (Serial) Serial.println(limit);
-#endif
-      if (limit < 1) limit = 1;
-      else if (limit > 1000000) limit = 1000000;
-      stepLimit = limit;
-      positions[0] = limit;
-      positions[1] = limit;
-      multiStepper.moveTo(positions);
+      if (Serial) Serial.println(stepLimit);
+      if (stepLimit < 1) stepLimit = 1;
+      else if (stepLimit > 1000000) stepLimit = 1000000;
+      running = true;
       break;
     case 'M': // Microstep
     case 'm':
       microstep = command.substring(1).toInt();
-#if USE_SERIAL > 0
       if (Serial) Serial.print("Setting microsteps to ");
       if (Serial) Serial.println(microstep);
-#endif
-      ms1 = microstep == 1 || microstep == 3 ? HIGH : LOW;
-      ms2 = microstep == 2 || microstep == 3 ? HIGH : LOW;
-      setCurrentStep(microstep);
-      digitalWrite(STEPPER_MS1_PIN, ms1);
-      digitalWrite(STEPPER_MS2_PIN, ms2);
+      if (microstep < 0) microstep = 0;
+      else if (microstep > 256) microstep;
+      driver.microsteps((uint16_t)microstep);
+      break;
+    case 'R':  // Read current settings
+    case 'r':
+      if (!Serial) return;
+      TMC2209_n::IOIN_t i{0}; i.sr = driver.IOIN();
+      TMC2208_n::GCONF_t g{0}; g.sr = driver.GCONF();
+      TMC2208_n::CHOPCONF_t c{0}; c.sr = driver.CHOPCONF();
+      TMC2209_n::COOLCONF_t l{0}; l.sr = driver.COOLCONF();
+      TMC2208_n::PWMCONF_t p{0}; p.sr = driver.PWMCONF();
+      uint16_t rmsCurrent = driver.rms_current();
+
+      Serial.println("Input IO status:");
+      Serial.print("    enn:       "); Serial.println(i.enn);
+      Serial.print("    ms1:       "); Serial.println(i.ms1);
+      Serial.print("    ms2:       "); Serial.println(i.ms2);
+      Serial.print("    diag:      "); Serial.println(i.diag);
+      Serial.print("    pdn_uart:  "); Serial.println(i.pdn_uart);
+      Serial.print("    step:      "); Serial.println(i.step);
+      Serial.print("    spread_en: "); Serial.println(i.spread_en);
+      Serial.print("    dir:       "); Serial.println(i.dir);
+      Serial.print("    version:   "); Serial.println(i.version);
+
+      Serial.println("");
+      Serial.println("General configuration:");
+      Serial.print("    i_scale_analog:   "); Serial.println(g.i_scale_analog);
+      Serial.print("    internal_rsense:  "); Serial.println(g.internal_rsense);
+      Serial.print("    en_spreadcycle:   "); Serial.println(g.en_spreadcycle);
+      Serial.print("    shaft:            "); Serial.println(g.shaft);
+      Serial.print("    index_otpw:       "); Serial.println(g.index_otpw);
+      Serial.print("    index_step:       "); Serial.println(g.index_step);
+      Serial.print("    pdn_disable:      "); Serial.println(g.pdn_disable);
+      Serial.print("    mstep_reg_select: "); Serial.println(g.mstep_reg_select);
+      Serial.print("    multistep_filt:   "); Serial.println(g.multistep_filt);
+
+      Serial.println("");
+      Serial.println("Chopper configuration:");
+      Serial.print("    toff:    "); Serial.println(c.toff);
+      Serial.print("    hstrt:   "); Serial.println(c.hstrt);
+      Serial.print("    hend:    "); Serial.println(c.hend);
+      Serial.print("    tbl:     "); Serial.println(c.tbl);
+      Serial.print("    vsense:  "); Serial.println(c.vsense);
+      Serial.print("    mres:    "); Serial.println(c.mres);
+      Serial.print("    intpol:  "); Serial.println(c.intpol);
+      Serial.print("    dedge:   "); Serial.println(c.dedge);
+      Serial.print("    diss2g:  "); Serial.println(c.diss2g);
+      Serial.print("    diss2vs: "); Serial.println(c.diss2vs);
+
+      Serial.println("");
+      Serial.println("CoolStep configuration:");
+      Serial.print("    semin:  "); Serial.println(l.semin);
+      Serial.print("    seup:   "); Serial.println(l.seup);
+      Serial.print("    semax:  "); Serial.println(l.semax);
+      Serial.print("    sedn:   "); Serial.println(l.sedn);
+      Serial.print("    seimin: "); Serial.println(l.seimin);
+
+      Serial.println("");
+      Serial.println("Pulse-width modulation configuration:");
+      Serial.print("    pwm_ofs:       "); Serial.println(p.pwm_ofs);
+      Serial.print("    pwm_grad:      "); Serial.println(p.pwm_grad);
+      Serial.print("    pwm_freq:      "); Serial.println(p.pwm_freq);
+      Serial.print("    pwm_autoscale: "); Serial.println(p.pwm_autoscale);
+      Serial.print("    pwm_autograd:  "); Serial.println(p.pwm_autograd);
+      Serial.print("    freewheel:     "); Serial.println(p.freewheel);
+      Serial.print("    pwm_reg:       "); Serial.println(p.pwm_reg);
+      Serial.print("    pwm_lim:       "); Serial.println(p.pwm_lim);
+
+      Serial.println("");
+      Serial.print("Requested current: "); Serial.println(rmsCurrent);
+
       break;
   }
-}
-
-void blePeripheralConnectHandler(BLEDevice central) {
-#if USE_SERIAL > 0
-  if (!Serial) return;
-
-  // central connected event handler
-  Serial.print("Connected event, central: ");
-  Serial.println(central.address());
-#endif
-}
-
-void blePeripheralDisconnectHandler(BLEDevice central) {
-#if USE_SERIAL > 0
-  if (!Serial) return;
-
-  // central disconnected event handler
-  Serial.print("Disconnected event, central: ");
-  Serial.println(central.address());
-#endif
-}
-
-void bleAdvertise() {
-  // start advertising
-  BLE.advertise();
-#if USE_SERIAL > 0
-  if (Serial) Serial.println("BLE waiting for connections");
-#endif
-}
-
-void setStringValue(BLECharacteristic &characteristic, const char * name, const String &value) {
-  String val = value;
-  if (val.length() > BLE_STRING_SIZE) {
-    val = val.substring(0, BLE_STRING_SIZE);
-  }
-
-  int ret = characteristic.writeValue(val.c_str(), false);
-}
-
-void setDoubleValue(BLECharacteristic &characteristic, const char * name, const double value) {
-  byte arr[8];
-  memcpy(arr, (uint8_t *) &value, 8);
-  int ret = characteristic.writeValue(arr, 8, false);
-}
-
-void setIntValue(BLECharacteristic &characteristic, const char * name, const int value) {
-  byte arr[4];
-  memcpy(arr, (uint8_t *) &value, 4);
-  int ret = characteristic.writeValue(arr, 4, false);
-}
-
-void setMaxRadius(const double value) {
-  setDoubleValue(bleMaxRadius, "Max Radius", value);
-}
-
-void setRadiusStepSize(const double value) {
-  setDoubleValue(bleRadiusStepSize, "Radius Step Size", value);
-}
-
-void setAzimuthStepSize(const double value) {
-  setDoubleValue(bleAzimuthStepSize, "Azimuth Step Size", value);
-}
-
-void setMarbleSizeInRadiusSteps(const int value) {
-  setIntValue(bleMarbleSize, "Marble Size in Radius Steps", value);
-}
-
-void setCurrentDrawing(const String &value) {
-  setStringValue(bleDrawing, "Drawing", value);
-}
-
-void setCurrentCommand(const String &value) {
-  setStringValue(bleDrawingCommand, "Command", value);
-}
-
-void setCurrentStep(const int value) {
-  if (currentStepTime < nextStepUpdateTime) return;
-
-  nextStepUpdateTime = currentStepTime + STEP_UPDATE_INTERVAL;
-  setIntValue(bleStep, "Step", value);
-}
-
-void setPosition(const double radius, const double azimuth) {
-  unsigned long cur = millis();
-  if (currentStepTime < nextPositionUpdateTime) return;
-
-  nextPositionUpdateTime = currentStepTime + POSITION_UPDATE_INTERVAL;
-  setDoubleValue(bleRadius, "Radius", radius);
-  setDoubleValue(bleAzimuth, "Azimuth", azimuth);
-}
-
-void setState(const String &value) {
-  setStringValue(bleState, "State", value);
-}
-
-void writeStatus(const String &key, const String &value) {
-  setStringValue(bleStatus, "Status", key + (key.length() > 0 && value.length() > 0 ? ": " : "") + value);
 }
