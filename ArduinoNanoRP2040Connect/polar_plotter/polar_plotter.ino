@@ -19,7 +19,7 @@ WiFiClient wifiClient;
 HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
 HttpDrawingProducer drawings(httpClient, drawingsFile, drawingPathPrefix);
 #else
-#include "knownDrawingProducer.h"
+#include "drawingProducer.h"
 KnownDrawingProducer drawings;
 #endif
 #if USE_BLE > 0
