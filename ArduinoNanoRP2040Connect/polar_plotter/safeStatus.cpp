@@ -67,6 +67,7 @@ void SafeStatus::safeLcdPrint(const String &value) {
 #endif
 }
 
+#if USE_BLE > 0
 void setStringValue(BLECharacteristic &characteristic, const char * name, const String &value) {
   String val = value;
   if (val.length() > BLE_STRING_SIZE) {
@@ -119,6 +120,7 @@ void setIntValue(BLECharacteristic &characteristic, const char * name, const int
   Serial.println(ret);
 #endif
 }
+#endif
 
 void SafeStatus::setMaxRadius(const double value) {
 #if USE_BLE > 0

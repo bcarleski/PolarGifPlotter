@@ -2,7 +2,7 @@
 #define _POLAR_PLOTTER_CONSTANTS_
 
 #define USE_LCD 0
-#define USE_BLE 1
+#define USE_BLE 0
 #define USE_CLOUD 0
 
 #define INPUT_CHECK_WAIT_TIME 200UL
@@ -34,30 +34,18 @@
 #define LCD_D6 4
 #define LCD_D7 5
 
-#define RADIUS_STEPPER_STEPS_PER_ROTATION 1600
-#define RADIUS_STEPPER_STEP_PIN 16
-#define RADIUS_STEPPER_DIR_PIN 17
-#define RADIUS_GEAR_RATIO 3.0                  // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
-#define RADIUS_ROTATIONS_TO_MAX_RADIUS 1.0     // the number of complete turns of the drive gear that it takes to go from the center to the maximum radius
-#define RADIUS_FAST_SPEED 18000                 // The maximum speed the Radius motor should ever turn, in steps per second
-#define RADIUS_SLOW_SPEED 2000                  // The maximum speed the Radius motor should ever turn, in steps per second
-#define RADIUS_STEP_MULTIPLIER 16
+#define RADIUS_ADDRESS 0
+#define RADIUS_STEP_PIN 14
+#define RADIUS_DIR_PIN 15
 
-#define AZIMUTH_STEPPER_STEPS_PER_ROTATION 1600
-#define AZIMUTH_STEPPER_STEP_PIN 18
-#define AZIMUTH_STEPPER_DIR_PIN 19
-#define AZIMUTH_GEAR_RATIO 3.0                 // # of drive gear teeth / # of motor gear teeth, i.e. if the drive shaft gear has 20 teeth, and the motor has 10, this should be 2.0
-#define AZIMUTH_FAST_SPEED 18000                // The maximum speed the Radius motor should ever turn, in steps per second
-#define AZIMUTH_SLOW_SPEED 2000                 // The maximum speed the Radius motor should ever turn, in steps per second
-#define AZIMUTH_STEP_MULTIPLIER 16
+#define AZIMUTH_ADDRESS 1
+#define AZIMUTH_STEP_PIN 16
+#define AZIMUTH_DIR_PIN 17
 
 #define MAX_RADIUS 1000
-#define RADIUS_STEP_SIZE MAX_RADIUS / RADIUS_ROTATIONS_TO_MAX_RADIUS / RADIUS_STEPPER_STEPS_PER_ROTATION / RADIUS_GEAR_RATIO
-#define AZIMUTH_STEP_SIZE 2 * PI / AZIMUTH_STEPPER_STEPS_PER_ROTATION / AZIMUTH_GEAR_RATIO
 
 #define MARBLE_SIZE_IN_RADIUS_STEPS 650
 
-#define MINIMUM_STEP_DELAY_MILLIS 200
 #define INITIAL_BACKOFF_DELAY_MILLIS 500UL
 #define MAX_BACKOFF_DELAY_MILLIS 300000UL
 

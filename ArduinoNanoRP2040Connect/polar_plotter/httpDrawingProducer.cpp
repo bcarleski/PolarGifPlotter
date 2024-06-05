@@ -20,19 +20,21 @@ String* HttpDrawingProducer::getNextDrawing() {
   String response = client.responseBody();
   if (Serial) Serial.println("    Got response:\n        Body: " + response + "\n        Status Code: " + statusCode);
 
-  JSONVar json = JSON.parse(response);
-  if (!json.hasOwnProperty("drawings")) {
+  deserializeJson(doc, response);
+  if (!doc.containsKey("drawings")) {
     if (Serial) Serial.println("    Could not find drawings node in response");
     return NULL;
   }
 
-  JSONVar drawings = json["drawings"];
-  if (drawings.length() > 0) {
-    int index = random(drawings.length());
+  JsonArrayConst drawings = doc["drawings"].as<JsonArrayConst>();
+  if (drawings.size() > 0) {
+    int index = random(drawings.size());
 
-    JSONVar entry = drawings[index];
-    if (entry.hasOwnProperty("drawing")) {
-      String drawingName = entry["drawing"];
+    JsonObjectConst entry = drawings[index].as<JsonObjectConst>();
+    if (entry.containsKey("drawing")) {
+      String drawingName = entry["drawing"].as<String>();
+      doc.clear();
+
       setDrawingName(drawingName);
 
       String drawingPath = drawingPathPrefix + drawingName + ".json";
@@ -53,6 +55,8 @@ String* HttpDrawingProducer::getNextDrawing() {
       return &response;
     }
   }
+
+  doc.clear();
 
   if (Serial) Serial.println("    Could not find a drawing in response");
   return NULL;

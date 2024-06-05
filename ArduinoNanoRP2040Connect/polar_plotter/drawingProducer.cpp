@@ -12,19 +12,21 @@ bool DrawingProducer::tryGetNewDrawing() {
   String nextDrawing = *drawingPointer;
   if (Serial) Serial.println("    Got next drawing:\n    Body: " + nextDrawing);
 
-  JSONVar json = JSON.parse(nextDrawing);
-  if (!json.hasOwnProperty("commands")) {
+  deserializeJson(doc, nextDrawing);
+  if (!doc.containsKey("commands")) {
     if (Serial) Serial.println("    Could not find commands node in drawing");
     return false;
   }
 
-  JSONVar commandList = json["commands"];
-  int cmdCount = commandList.length() > MAX_COMMANDS ? MAX_COMMANDS : commandList.length();
+  JsonArrayConst commandList = doc["commands"].as<JsonArrayConst>();
+  int cmdCount = commandList.size() > MAX_COMMANDS ? MAX_COMMANDS : commandList.size();
   commandCount = cmdCount;
   for (int i = 0; i < cmdCount; i++) {
-    String command = commandList[i];
+    String command = commandList[i].as<String>();
     commands[i] = command;
   }
+
+  doc.clear();
 
   return commandCount > 0;
 }

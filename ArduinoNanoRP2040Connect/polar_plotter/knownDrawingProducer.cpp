@@ -1,6 +1,6 @@
 #include "knownDrawingProducer.h"
 
-const int KNOWN_DRAWINGS_COUNT = 3;
+const int KNOWN_DRAWINGS_COUNT = 8;
 const String KNOWN_DRAWINGS[] = {
   "{\"commands\":[\"L600,600\",\"L600,-600\",\"L-600,-600\",\"L-600,600\",\"L600,600\"]}",
   "{\"commands\":[\"L0,680\",\"L-480,-680\",\"L720,280\",\"L-720,280\",\"L480,-680\",\"L0,680\"]}",
@@ -13,9 +13,7 @@ const String KNOWN_DRAWINGS[] = {
 };
 
 String* KnownDrawingProducer::getNextDrawing() {
-  int idx = drawingIndex % KNOWN_DRAWINGS_COUNT;
-  drawingIndex++;
-
+  int idx = random(0, KNOWN_DRAWINGS_COUNT);
   String drawingName = "Drawing_" + String(idx + 1);
   setDrawingName(drawingName);
 

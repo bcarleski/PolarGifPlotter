@@ -2,7 +2,6 @@
 
 class KnownDrawingProducer : public DrawingProducer {
 private:
-  int drawingIndex;
   String nextDrawing;
 
 protected:

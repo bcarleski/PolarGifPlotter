@@ -2,11 +2,9 @@
 #include "constants.h"
 
 #include <PolarPlotterCore.h>
+#include "PolarCoordinateStepper.h"
 #include "safePrinter.h"
 #include "safeStatus.h"
-
-#include <AccelStepper.h>
-#include <MultiStepper.h>
 
 #if USE_CLOUD > 0
 #include <WiFiNINA.h>
@@ -32,9 +30,6 @@ SafeStatus status(bleService);
 SafeStatus status;
 #endif
 
-const double azimuthStepsForOneTableRotation = AZIMUTH_STEPPER_STEPS_PER_ROTATION * AZIMUTH_GEAR_RATIO;
-const double radiusStepsForOneDriveGearRotation = RADIUS_STEPPER_STEPS_PER_ROTATION * RADIUS_GEAR_RATIO;
-const double radiusStepsToAzimuthStep = -1.0 * radiusStepsForOneDriveGearRotation / azimuthStepsForOneTableRotation;
 const double maxRadius = MAX_RADIUS;
 const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
 double radiusStepOffsetFromAzimuth = 0.0;
@@ -44,20 +39,27 @@ const char* radiusStepSizeKey = "DynamicSand.RadiusStepSize";
 const char* azimuthStepSizeKey = "DynamicSand.AzimuthStepSize";
 SafePrinter printer;
 
-AccelStepper radiusStepper(AccelStepper::DRIVER, RADIUS_STEPPER_STEP_PIN, RADIUS_STEPPER_DIR_PIN);
-AccelStepper azimuthStepper(AccelStepper::DRIVER, AZIMUTH_STEPPER_STEP_PIN, AZIMUTH_STEPPER_DIR_PIN);
+PolarCoordinateStepper stepper(RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
+                               AZIMUTH_ADDRESS, AZIMUTH_STEP_PIN, AZIMUTH_DIR_PIN,
+                               1);
 PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps);
-MultiStepper multiStepper;
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
 unsigned long nextWifiCheckTime = 0;
 unsigned long currentMillis = 0;
 unsigned long nextInputCheckTime = 0;
+int nextRadiusStep = 0;
+int nextAzimuthStep = 0;
+bool nextFastStep = false;
 bool bleInitialized = false;
 bool bleAdvertising = false;
+bool waitingToAddStep = false;
+bool setOrigin = false;
+bool needsClear = false;
 
 void setup() {
+  stepper.init();
   printer.init();
   delay(2000);
 
@@ -68,10 +70,7 @@ void setup() {
   printer.println("Starting Setup");
   status.status("START SETUP");
 
-  radiusStepper.setMaxSpeed(RADIUS_SLOW_SPEED);
-  azimuthStepper.setMaxSpeed(AZIMUTH_SLOW_SPEED);
-  multiStepper.addStepper(radiusStepper);
-  multiStepper.addStepper(azimuthStepper);
+  stepper.begin();
   plotter.onMoveTo(performMoveTo);
   plotter.onRecalibrate(performRecalibrate);
 
@@ -121,7 +120,25 @@ void loop() {
     nextInputCheckTime = currentMillis + INPUT_CHECK_WAIT_TIME;
   }
 
-  if (radiusStepper.distanceToGo() != 0 || azimuthStepper.distanceToGo() != 0) return;
+  stepper.move();
+
+  if (setOrigin || needsClear) {
+    if (stepper.hasSteps()) return;
+    if (setOrigin) {
+      setOrigin = false;
+      stepper.declareOrigin();
+    } else {
+      needsClear = false;
+      stepper.reset();
+    }
+  }
+
+  if (waitingToAddStep) {
+    if (stepper.canAddSteps()) {
+      stepper.addSteps(nextRadiusStep, nextAzimuthStep, nextFastStep);
+      waitingToAddStep = false;
+    } else return;
+  }
 
   if (plotter.canCycle()) {
     plotter.performCycle();
@@ -197,28 +214,15 @@ void bleDestroy() {
 }
 
 void performMoveTo(const long radiusSteps, const long azimuthSteps, const bool fastStep) {
-  long position[2];
-
-  radiusStepper.setMaxSpeed(fastStep ? RADIUS_FAST_SPEED : RADIUS_SLOW_SPEED);
-  azimuthStepper.setMaxSpeed(fastStep ? AZIMUTH_FAST_SPEED : AZIMUTH_SLOW_SPEED);
-
-  // Because of how my arm is configured, an azimuth step results in a slight radius step
-  // that we need to offset and account for
-  int rSteps = radiusSteps;
-  if (azimuthSteps != 0) {
-    double radiusStepOffset = radiusStepOffsetFromAzimuth - radiusStepsToAzimuthStep * azimuthSteps;
-    int steps = round(radiusStepOffset);
-
-    if (steps != 0) {
-      radiusStepOffsetFromAzimuth += radiusStepOffset - steps;
-      rSteps += steps;
-    }
+  if (stepper.canAddSteps()) {
+    stepper.addSteps(radiusSteps, azimuthSteps, fastStep);
+    return;
   }
 
-  position[0] = radiusStepper.currentPosition() + rSteps * RADIUS_STEP_MULTIPLIER;
-  position[1] = azimuthStepper.currentPosition() + azimuthSteps * AZIMUTH_STEP_MULTIPLIER;
-
-  multiStepper.moveTo(position);
+  waitingToAddStep = true;
+  nextRadiusStep = radiusSteps;
+  nextAzimuthStep = azimuthSteps;
+  nextFastStep = fastStep;
 }
 
 void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSteps) {
@@ -227,11 +231,15 @@ void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSte
   azimuthStepSize = (2 * PI) / fullCircleAzimuthSteps;
 
   plotter.calibrate(radiusStepSize, azimuthStepSize);
+  stepper.declareOrigin();
+  setOrigin = true;
 }
 
 void handleSerialInput() {
   if (Serial && Serial.available()) {
     String command = Serial.readStringUntil('\n');
+    Serial.print("Serial input: ");
+    Serial.println(command);
     plotter.addCommand(command);
   }
 }
@@ -247,6 +255,7 @@ bool tryGetDrawingUpdate() {
   String drawing = drawings.getDrawing();
   int commandCount = drawings.getCommandCount();
 
+  needsClear = true;
   printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
   plotter.newDrawing(drawing);
 
@@ -261,7 +270,7 @@ bool tryGetDrawingUpdate() {
 #if USE_BLE > 0
 void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
   String command = bleCommand.value();
-  if (Serial) Serial.println("Got new command from BLE: " + command);
+  if (Serial) Serial.println("BLE input: " + command);
   plotter.addCommand(command);
 }
 

@@ -1,4 +1,4 @@
-#include <Arduino_JSON.h>
+#include <ArduinoJson.h>
 #define MAX_COMMANDS 2048
 
 class DrawingProducer {
@@ -8,6 +8,7 @@ private:
   int commandCount;
 
 protected:
+  JsonDocument doc;
   virtual String* getNextDrawing() = 0;
   void setDrawingName(String& name) { drawing = name; }
 
