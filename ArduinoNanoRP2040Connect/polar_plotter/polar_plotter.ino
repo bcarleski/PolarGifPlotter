@@ -2,6 +2,7 @@
 #include "constants.h"
 
 #include <PolarPlotterCore.h>
+#include "backgroundMotorCoordinator.h"
 #include "safePrinter.h"
 #include "safeStatus.h"
 
@@ -31,34 +32,22 @@ SafeStatus status;
 
 const double maxRadius = MAX_RADIUS;
 const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
-double radiusStepOffsetFromAzimuth = 0.0;
-double radiusStepSize;
-double azimuthStepSize;
-const char* radiusStepSizeKey = "DynamicSand.RadiusStepSize";
-const char* azimuthStepSizeKey = "DynamicSand.AzimuthStepSize";
 SafePrinter printer;
 
-PolarCoordinateStepper stepper(RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
-                               AZIMUTH_ADDRESS, AZIMUTH_STEP_PIN, AZIMUTH_DIR_PIN,
-                               1);
-PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps);
+BackgroundMotorCoordinator coordinator(RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
+                                       AZIMUTH_ADDRESS, AZIMUTH_STEP_PIN, AZIMUTH_DIR_PIN);
+PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps, &coordinator);
 
 unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
 unsigned long nextWifiCheckTime = 0;
 unsigned long currentMillis = 0;
 unsigned long nextInputCheckTime = 0;
-int nextRadiusStep = 0;
-int nextAzimuthStep = 0;
-bool nextFastStep = false;
 bool bleInitialized = false;
 bool bleAdvertising = false;
-bool waitingToAddStep = false;
-bool setOrigin = false;
-bool needsClear = false;
 
 void setup() {
-  stepper.init();
+  startBackgroundThread(&coordinator);
   printer.init();
   delay(2000);
 
@@ -69,8 +58,7 @@ void setup() {
   printer.println("Starting Setup");
   status.status("START SETUP");
 
-  stepper.begin();
-  plotter.onMoveTo(performMoveTo);
+  coordinator.begin();
   plotter.onRecalibrate(performRecalibrate);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
@@ -106,7 +94,6 @@ void setup() {
 }
 
 void loop() {
-  // multiStepper.run();
   currentMillis = millis();
 
   if (currentMillis >= nextInputCheckTime) {
@@ -117,26 +104,6 @@ void loop() {
 
     currentMillis = millis();
     nextInputCheckTime = currentMillis + INPUT_CHECK_WAIT_TIME;
-  }
-
-  stepper.move();
-
-  if (setOrigin || needsClear) {
-    if (stepper.hasSteps()) return;
-    if (setOrigin) {
-      setOrigin = false;
-      stepper.declareOrigin();
-    } else {
-      needsClear = false;
-      stepper.reset();
-    }
-  }
-
-  if (waitingToAddStep) {
-    if (stepper.canAddSteps()) {
-      stepper.addSteps(nextRadiusStep, nextAzimuthStep, nextFastStep);
-      waitingToAddStep = false;
-    } else return;
   }
 
   if (plotter.canCycle()) {
@@ -212,26 +179,12 @@ void bleDestroy() {
   bleInitialized = false;
 }
 
-void performMoveTo(const long radiusSteps, const long azimuthSteps, const bool fastStep) {
-  if (stepper.canAddSteps()) {
-    stepper.addSteps(radiusSteps, azimuthSteps, fastStep);
-    return;
-  }
-
-  waitingToAddStep = true;
-  nextRadiusStep = radiusSteps;
-  nextAzimuthStep = azimuthSteps;
-  nextFastStep = fastStep;
-}
-
 void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSteps) {
   const double maxRadius = MAX_RADIUS;
-  radiusStepSize = maxRadius / maxRadiusSteps;
-  azimuthStepSize = (2 * PI) / fullCircleAzimuthSteps;
+  double radiusStepSize = maxRadius / maxRadiusSteps;
+  double azimuthStepSize = (2 * PI) / fullCircleAzimuthSteps;
 
   plotter.calibrate(radiusStepSize, azimuthStepSize);
-  stepper.declareOrigin();
-  setOrigin = true;
 }
 
 void handleSerialInput() {
@@ -254,7 +207,6 @@ bool tryGetDrawingUpdate() {
   String drawing = drawings.getDrawing();
   int commandCount = drawings.getCommandCount();
 
-  needsClear = true;
   printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
   plotter.newDrawing(drawing);
 

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "polarMotorCoordinator.h"
-#include "pico/stdlib.h"
+#include "tmcStepDirMotor.h"
 #include "pico/util/queue.h"
 #include "pico/multicore.h"
 
@@ -22,7 +22,7 @@ enum BackgroundAction {
   BACKGROUND_ACTION_PAUSE,
   BACKGROUND_ACTION_RESUME,
   BACKGROUND_ACTION_STOP
-}
+};
 
 typedef struct {
   BackgroundAction action;
@@ -45,18 +45,6 @@ typedef struct {
 queue_t command_queue;
 queue_t step_queue;
 queue_t result_queue;
-BackgroundMotorCoordinator* coordinator;
-
-void backgroundThreadEntry() {
-  coordinator->backgroundInit();
-  sleep_ms(2000);
-  coordinator->backgroundBegin();
-  sleep_ms(2000);
-
-  while (true) {
-    coordinator->backgroundLoop();
-  }
-}
 
 class BackgroundMotorCoordinator : public PolarMotorCoordinator {
 private:
@@ -80,7 +68,7 @@ private:
   }
   ResultEntry& getResult(BackgroundAction action) {
     addCommandEntry(action, 0UL);
-    queue_remove_blocking(&results_queue, &result);
+    queue_remove_blocking(&result_queue, &result);
 
     return result;
   }
@@ -97,19 +85,10 @@ public:
       backgroundCoordinator(PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER)),
       PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER) {}
 
-  void init() {
-    coordinator = this;
-    stdio_init_all();
-    delay(20);
-
-    queue_init(&command_queue, sizeof(CommandEntry), COMMAND_QUEUE_ENTRIES);
-    queue_init(&step_queue, sizeof(StepEntry), STEP_QUEUE_ENTRIES);
-    queue_init(&result_queue, sizeof(ResultEntry), 1);
-
-    multicore_launch_core1(backgroundThreadEntry);
-  }
+  void init() {}
   void begin() {}
-  bool canAddSteps() { return !queue_is_full(&step_queue));
+  bool canAddSteps() {
+    return !queue_is_full(&step_queue);
   }
   void changeStepInterval(const unsigned long interval) {
     addCommandEntry(BACKGROUND_ACTION_CHANGE_STEP_INTERVAL, interval);
@@ -118,20 +97,20 @@ public:
     addStepEntry(radiusStep, azimuthStep, fastStep);
   }
   void declareOrigin() {
-    addActionEntry(BACKGROUND_ACTION_DECLARE_ORIGIN, 0UL);
+    addCommandEntry(BACKGROUND_ACTION_DECLARE_ORIGIN, 0UL);
   }
   void move() {}
   void reset() {
-    addActionEntry(BACKGROUND_ACTION_RESET, 0UL);
+    addCommandEntry(BACKGROUND_ACTION_RESET, 0UL);
   }
   void pause() {
-    addActionEntry(BACKGROUND_ACTION_PAUSE, 0UL);
+    addCommandEntry(BACKGROUND_ACTION_PAUSE, 0UL);
   }
   void resume() {
-    addActionEntry(BACKGROUND_ACTION_RESUME, 0UL);
+    addCommandEntry(BACKGROUND_ACTION_RESUME, 0UL);
   }
   void stop() {
-    addActionEntry(BACKGROUND_ACTION_STOP, 0UL);
+    addCommandEntry(BACKGROUND_ACTION_STOP, 0UL);
   }
   bool isMoving() {
     return !queue_is_empty(&step_queue) || getResult(BACKGROUND_ACTION_IS_MOVING).boolean;
@@ -174,11 +153,35 @@ public:
       long azimuth;
 
       switch (command.action) {
-        case BACKGROUND_ACTION_IS_MOVING: boolean = backgroundCoordinator.isMoving(); sendResult(boolean, 0UL, 0L, 0L); break;
-        case BACKGROUND_ACTION_STEP_INTERVAL: interval = backgroundCoordinator.getStepInterval(); sendResult(false, interval, 0L, 0L); break;
-        case BACKGROUND_ACTION_CURRENT_POSITION: stp = backgroundCoordinator.getCurrentPosition(); radius = stp.getRadiusStep(); azimuth = stp.getAzimuthStep(); boolean = stp.isFast(); sendResult(boolean, 0UL, radius, azimuth); break;
-        case BACKGROUND_ACTION_CURRENT_PROGRESS: stp = backgroundCoordinator.getCurrentProgress(); radius = stp.getRadiusStep(); azimuth = stp.getAzimuthStep(); boolean = stp.isFast(); sendResult(boolean, 0UL, radius, azimuth); break;
-        case BACKGROUND_ACTION_CURRENT_STEP: stp = backgroundCoordinator.getCurrentStep(); radius = stp.getRadiusStep(); azimuth = stp.getAzimuthStep(); boolean = stp.isFast(); sendResult(boolean, 0UL, radius, azimuth); break;
+        case BACKGROUND_ACTION_IS_MOVING:
+          boolean = backgroundCoordinator.isMoving();
+          sendResult(boolean, 0UL, 0L, 0L);
+          break;
+        case BACKGROUND_ACTION_STEP_INTERVAL:
+          interval = backgroundCoordinator.getStepInterval();
+          sendResult(false, interval, 0L, 0L);
+          break;
+        case BACKGROUND_ACTION_CURRENT_POSITION:
+          stp = backgroundCoordinator.getCurrentPosition();
+          radius = stp.getRadiusStep();
+          azimuth = stp.getAzimuthStep();
+          boolean = stp.isFast();
+          sendResult(boolean, 0UL, radius, azimuth);
+          break;
+        case BACKGROUND_ACTION_CURRENT_PROGRESS:
+          stp = backgroundCoordinator.getCurrentProgress();
+          radius = stp.getRadiusStep();
+          azimuth = stp.getAzimuthStep();
+          boolean = stp.isFast();
+          sendResult(boolean, 0UL, radius, azimuth);
+          break;
+        case BACKGROUND_ACTION_CURRENT_STEP:
+          stp = backgroundCoordinator.getCurrentStep();
+          radius = stp.getRadiusStep();
+          azimuth = stp.getAzimuthStep();
+          boolean = stp.isFast();
+          sendResult(boolean, 0UL, radius, azimuth);
+          break;
         case BACKGROUND_ACTION_CHANGE_STEP_INTERVAL: backgroundCoordinator.changeStepInterval(command.stepInterval); break;
         case BACKGROUND_ACTION_DECLARE_ORIGIN: backgroundCoordinator.declareOrigin(); break;
         case BACKGROUND_ACTION_RESET: backgroundCoordinator.reset(); break;
@@ -195,3 +198,25 @@ public:
     backgroundCoordinator.move();
   }
 };
+
+BackgroundMotorCoordinator* bgCoordinator;
+
+void backgroundThreadEntry() {
+  bgCoordinator->backgroundInit();
+  sleep_ms(2000);
+  bgCoordinator->backgroundBegin();
+  sleep_ms(2000);
+
+  while (true) {
+    bgCoordinator->backgroundLoop();
+  }
+}
+
+void startBackgroundThread(BackgroundMotorCoordinator* _bgCoordinator) {
+  bgCoordinator = _bgCoordinator;
+  queue_init(&command_queue, sizeof(CommandEntry), COMMAND_QUEUE_ENTRIES);
+  queue_init(&step_queue, sizeof(StepEntry), STEP_QUEUE_ENTRIES);
+  queue_init(&result_queue, sizeof(ResultEntry), 1);
+
+  multicore_launch_core1(backgroundThreadEntry);
+}

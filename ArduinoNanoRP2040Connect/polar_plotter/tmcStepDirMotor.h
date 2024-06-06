@@ -14,6 +14,9 @@ private:
   TMC2209Stepper driver;
 
 protected:
+  void initDriver() {
+    SERIAL_PORT.begin(115200);
+  }
   void beginDriver() {
     driver.begin();
     driver.reset();
