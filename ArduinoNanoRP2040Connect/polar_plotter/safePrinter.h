@@ -19,7 +19,7 @@ public:
     }
   }
 
-  size_t write(const uint8_t*, size_t) {
+  size_t write(const uint8_t* str, size_t len) {
     if (Serial) {
       Serial.write(str, len);
     }

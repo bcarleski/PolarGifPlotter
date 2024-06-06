@@ -2,7 +2,6 @@
 #include "constants.h"
 
 #include <PolarPlotterCore.h>
-#include "PolarCoordinateStepper.h"
 #include "safePrinter.h"
 #include "safeStatus.h"
 
