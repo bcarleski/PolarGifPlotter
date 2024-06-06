@@ -3,6 +3,7 @@
 #include "tmcStepDirMotor.h"
 #include "pico/util/queue.h"
 #include "pico/multicore.h"
+#include "safePrinter.h"
 
 #define MINIMUM_INTERVAL 20000
 #define MAXIMUM_INTERVAL 1000000000
@@ -48,6 +49,7 @@ queue_t result_queue;
 
 class BackgroundMotorCoordinator : public PolarMotorCoordinator {
 private:
+  SafePrinter printer;
   PolarMotorCoordinator backgroundCoordinator;
   TmcStepDirMotor radius;
   TmcStepDirMotor azimuth;
@@ -78,9 +80,10 @@ private:
   }
 
 public:
-  BackgroundMotorCoordinator(const int _radiusDriverAddress, const int _radiusStepPin, const int _radiusDirPin,
+  BackgroundMotorCoordinator(SafePrinter printer, const int _radiusDriverAddress, const int _radiusStepPin, const int _radiusDirPin,
                              const int _azimuthDriverAddress, const int _azimuthStepPin, const int _azimuthDirPin)
-    : radius(TmcStepDirMotor(_radiusDriverAddress, _radiusStepPin, _radiusDirPin)),
+    : printer(printer),
+      radius(TmcStepDirMotor(_radiusDriverAddress, _radiusStepPin, _radiusDirPin)),
       azimuth(TmcStepDirMotor(_azimuthDriverAddress, _azimuthStepPin, _azimuthDirPin)),
       backgroundCoordinator(PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER)),
       PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER) {}
@@ -212,11 +215,15 @@ void backgroundThreadEntry() {
   }
 }
 
-void startBackgroundThread(BackgroundMotorCoordinator* _bgCoordinator) {
+void startBackgroundThread(SafePrinter& printer, BackgroundMotorCoordinator* _bgCoordinator) {
   bgCoordinator = _bgCoordinator;
+  printer.println("Initializing command queue");
   queue_init(&command_queue, sizeof(CommandEntry), COMMAND_QUEUE_ENTRIES);
+  printer.println("Initializing step queue");
   queue_init(&step_queue, sizeof(StepEntry), STEP_QUEUE_ENTRIES);
+  printer.println("Initializing result queue");
   queue_init(&result_queue, sizeof(ResultEntry), 1);
 
+  printer.println("Starting background thread");
   multicore_launch_core1(backgroundThreadEntry);
 }

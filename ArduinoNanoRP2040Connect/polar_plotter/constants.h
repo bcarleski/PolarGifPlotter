@@ -4,6 +4,7 @@
 #define USE_LCD 0
 #define USE_BLE 0
 #define USE_CLOUD 0
+#define USE_SERIAL 1
 
 #define INPUT_CHECK_WAIT_TIME 200UL
 

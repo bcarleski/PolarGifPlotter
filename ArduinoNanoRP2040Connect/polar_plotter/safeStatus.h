@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "statusUpdate.h"
 #include "constants.h"
+#include "safePrinter.h"
 
 #if USE_LCD > 0
 #include <LiquidCrystal.h>
@@ -31,6 +32,7 @@ private:
   BLEDoubleCharacteristic bleAzimuth;
   BLEStringCharacteristic bleState;
 #endif
+  SafePrinter printer;
   String lastKey;
   String lastValue;
   bool preservePair;
@@ -40,9 +42,9 @@ private:
   void safeLcdPrint(const String &value);
 
 public:
-  SafeStatus(
+  SafeStatus(SafePrinter printer
 #if USE_BLE > 0
-    BLEService& bleService
+    , BLEService& bleService
 #endif
   );
   void init();

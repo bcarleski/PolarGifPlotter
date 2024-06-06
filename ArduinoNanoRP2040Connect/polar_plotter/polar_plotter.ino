@@ -3,8 +3,9 @@
 
 #include <PolarPlotterCore.h>
 #include "backgroundMotorCoordinator.h"
-#include "safePrinter.h"
 #include "safeStatus.h"
+
+SafePrinter printer;
 
 #if USE_CLOUD > 0
 #include <WiFiNINA.h>
@@ -17,24 +18,23 @@ const String drawingPathPrefix = DRAWING_PATH_PREFIX;
 
 WiFiClient wifiClient;
 HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
-HttpDrawingProducer drawings(httpClient, drawingsFile, drawingPathPrefix);
+HttpDrawingProducer drawings(printer, httpClient, drawingsFile, drawingPathPrefix);
 #else
 #include "drawingProducer.h"
-KnownDrawingProducer drawings;
+KnownDrawingProducer drawings(printer);
 #endif
 #if USE_BLE > 0
 BLEService bleService(BLE_SERVICE_UUID);
 BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
-SafeStatus status(bleService);
+SafeStatus status(printer, bleService);
 #else
-SafeStatus status;
+SafeStatus status(printer);
 #endif
 
 const double maxRadius = MAX_RADIUS;
 const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
-SafePrinter printer;
 
-BackgroundMotorCoordinator coordinator(RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
+BackgroundMotorCoordinator coordinator(printer, RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
                                        AZIMUTH_ADDRESS, AZIMUTH_STEP_PIN, AZIMUTH_DIR_PIN);
 PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps, &coordinator);
 
@@ -47,8 +47,8 @@ bool bleInitialized = false;
 bool bleAdvertising = false;
 
 void setup() {
-  startBackgroundThread(&coordinator);
   printer.init();
+  startBackgroundThread(printer, &coordinator);
   delay(2000);
 
   bleInitialize(true);
@@ -58,7 +58,6 @@ void setup() {
   printer.println("Starting Setup");
   status.status("START SETUP");
 
-  coordinator.begin();
   plotter.onRecalibrate(performRecalibrate);
 
   if (DEFAULT_DEBUG_LEVEL > 0) {
@@ -95,6 +94,7 @@ void setup() {
 
 void loop() {
   currentMillis = millis();
+  if (currentMillis >= 0) return;
 
   if (currentMillis >= nextInputCheckTime) {
     handleSerialInput();
@@ -129,13 +129,11 @@ void bleInitialize(bool holdOnFailure) {
   if (bleInitialized) return;
 
 #if USE_BLE > 0
-  if (Serial) Serial.println("Starting BLE");
+  printer.println("Starting BLE");
   int bleBegin = BLE.begin();
   if (!bleBegin) {
-    if (Serial) {
-      Serial.print(" BLE Start failed - ");
-      Serial.println(bleBegin);
-    }
+    printer.print(" BLE Start failed - ");
+    printer.println(bleBegin);
 
     while (holdOnFailure);
   } else {
@@ -153,7 +151,7 @@ void bleAdvertise() {
 #if USE_BLE > 0
   // start advertising
   BLE.advertise();
-  if (Serial) Serial.println("BLE waiting for connections");
+  printer.println("BLE waiting for connections");
 #endif
 }
 
@@ -162,17 +160,14 @@ void bleDestroy() {
 
 #if USE_BLE > 0
   if (BLE.connected()) {
-    if (Serial) Serial.println("BLE disconnecting");
+    printer.println("BLE disconnecting");
     BLE.disconnect();
   }
 
   if (bleAdvertising) {
-    if (Serial) Serial.println("BLE stopping advertise");
+    printer.println("BLE stopping advertise");
     BLE.stopAdvertise();
   }
-
-  //if (Serial) Serial.println("BLE shutting down");
-  //BLE.end();
 #endif
 
   bleAdvertising = false;
@@ -188,12 +183,14 @@ void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSte
 }
 
 void handleSerialInput() {
+#if USE_SERIAL > 0
   if (Serial && Serial.available()) {
     String command = Serial.readStringUntil('\n');
-    Serial.print("Serial input: ");
-    Serial.println(command);
+    printer.print("Serial input: ");
+    printer.println(command);
     plotter.addCommand(command);
   }
+#endif
 }
 
 bool tryGetDrawingUpdate() {
@@ -221,24 +218,20 @@ bool tryGetDrawingUpdate() {
 #if USE_BLE > 0
 void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
   String command = bleCommand.value();
-  if (Serial) Serial.println("BLE input: " + command);
+  printer.println("BLE input: " + command);
   plotter.addCommand(command);
 }
 
 void blePeripheralConnectHandler(BLEDevice central) {
-  if (!Serial) return;
-
   // central connected event handler
-  Serial.print("Connected event, central: ");
-  Serial.println(central.address());
+  printer.print("Connected event, central: ");
+  printer.println(central.address());
 }
 
 void blePeripheralDisconnectHandler(BLEDevice central) {
-  if (!Serial) return;
-
   // central disconnected event handler
-  Serial.print("Disconnected event, central: ");
-  Serial.println(central.address());
+  printer.print("Disconnected event, central: ");
+  printer.println(central.address());
 }
 #endif
 
@@ -260,11 +253,9 @@ void getCommands() {
 void doBackoffDelay() {
   nextWifiCheckTime = currentMillis + backoffDelay;
 
-  if (Serial) {
-    Serial.print("Waiting ");
-    Serial.print(backoffDelay);
-    Serial.println(" ms for backoff");
-  }
+  printer.print("Waiting ");
+  printer.print(backoffDelay);
+  printer.println(" ms for backoff");
   backoffDelay *= 2UL;
   if (backoffDelay > MAX_BACKOFF_DELAY_MILLIS) {
     backoffDelay = MAX_BACKOFF_DELAY_MILLIS;

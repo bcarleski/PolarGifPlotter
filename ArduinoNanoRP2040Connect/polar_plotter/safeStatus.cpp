@@ -1,21 +1,16 @@
 #include "safeStatus.h"
 
-SafeStatus::SafeStatus(
+SafeStatus::SafeStatus(SafePrinter printer
 #if USE_BLE > 0
-    BLEService& bleService
+    , BLEService& bleService
 #endif
   )
-#if USE_LCD > 0 || USE_BLE > 0
-  :
-#endif
+  : printer(printer)
 #if USE_LCD > 0
-  lcd(LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7))
-#endif
-#if USE_LCD > 0 && USE_BLE > 0
-  ,
+  , lcd(LiquidCrystal(LCD_RS, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7))
 #endif
 #if USE_BLE > 0
-  bleService(bleService),
+  , bleService(bleService),
   bleMaxRadius(BLEDoubleCharacteristic(BLE_MAX_RADIUS_UUID, BLERead | BLENotify)),
   bleRadiusStepSize(BLEDoubleCharacteristic(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify)),
   bleAzimuthStepSize(BLEDoubleCharacteristic(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify)),
@@ -75,49 +70,49 @@ void setStringValue(BLECharacteristic &characteristic, const char * name, const 
   }
 
 #if BLE_DEBUG > 0
-  Serial.print("Writing BLE ");
-  Serial.print(name);
-  Serial.print(": ");
-  Serial.print(val);
-  Serial.print(" - ");
+  printer.print("Writing BLE ");
+  printer.print(name);
+  printer.print(": ");
+  printer.print(val);
+  printer.print(" - ");
 #endif
   int ret = characteristic.writeValue(val.c_str(), false);
 #if BLE_DEBUG > 0
-  Serial.println(ret);
+  printer.println(ret);
 #endif
 }
 
 void setDoubleValue(BLECharacteristic &characteristic, const char * name, const double value) {
 #if BLE_DEBUG > 0
-  Serial.print("Writing BLE ");
-  Serial.print(name);
-  Serial.print(": ");
-  Serial.print(value);
-  Serial.print(" - ");
+  printer.print("Writing BLE ");
+  printer.print(name);
+  printer.print(": ");
+  printer.print(value);
+  printer.print(" - ");
 #endif
 
   byte arr[8];
   memcpy(arr, (uint8_t *) &value, 8);
   int ret = characteristic.writeValue(arr, 8, false);
 #if BLE_DEBUG > 0
-  Serial.println(ret);
+  printer.println(ret);
 #endif
 }
 
 void setIntValue(BLECharacteristic &characteristic, const char * name, const int value) {
 #if BLE_DEBUG > 0
-  Serial.print("Writing BLE ");
-  Serial.print(name);
-  Serial.print(": ");
-  Serial.print(value);
-  Serial.print(" - ");
+  printer.print("Writing BLE ");
+  printer.print(name);
+  printer.print(": ");
+  printer.print(value);
+  printer.print(" - ");
 #endif
 
   byte arr[4];
   memcpy(arr, (uint8_t *) &value, 4);
   int ret = characteristic.writeValue(arr, 4, false);
 #if BLE_DEBUG > 0
-  Serial.println(ret);
+  printer.println(ret);
 #endif
 }
 #endif

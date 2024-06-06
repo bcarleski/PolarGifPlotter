@@ -1,4 +1,5 @@
 #include <ArduinoJson.h>
+#include "safePrinter.h"
 #define MAX_COMMANDS 2048
 const int KNOWN_DRAWINGS_COUNT = 8;
 const String KNOWN_DRAWINGS[] = {
@@ -20,27 +21,29 @@ private:
 
 protected:
   JsonDocument doc;
+  SafePrinter printer;
   virtual String* getNextDrawing() = 0;
   void setDrawingName(String& name) {
     drawing = name;
   }
 
 public:
+  DrawingProducer(SafePrinter printer) : printer(printer) {}
   bool tryGetNewDrawing() {
     drawing = "UNKNOWN";
 
     String* drawingPointer = getNextDrawing();
     if (drawingPointer == NULL) {
-      if (Serial) Serial.println("    Got NULL drawing.");
+      printer.println("    Got NULL drawing.");
       return false;
     }
 
     String nextDrawing = *drawingPointer;
-    if (Serial) Serial.println("    Got next drawing:\n    Body: " + nextDrawing);
+    printer.println("    Got next drawing:\n    Body: " + nextDrawing);
 
     deserializeJson(doc, nextDrawing);
     if (!doc.containsKey("commands")) {
-      if (Serial) Serial.println("    Could not find commands node in drawing");
+      printer.println("    Could not find commands node in drawing");
       return false;
     }
 
@@ -89,6 +92,7 @@ protected:
   using DrawingProducer::setDrawingName;
 
 public:
+  KnownDrawingProducer(SafePrinter printer) : DrawingProducer(printer) {}
   using DrawingProducer::tryGetNewDrawing;
   using DrawingProducer::getDrawing;
   using DrawingProducer::getCommandCount;
