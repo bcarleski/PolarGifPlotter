@@ -1,4 +1,5 @@
-#include <BTstackLib.h>
+//#include <BTstackLib.h>
+#include <ArduinoBLE.h>
 
 #define BLE_DEVICE_NAME "Dynamic_Sand_Arduino"
 #define BLE_SERVICE_UUID "45aa5c8f-c47e-42f6-af4a-66544b8aff17"
@@ -15,49 +16,111 @@
 #define BLE_STATE_UUID "ec314ea1-7426-47fb-825c-8fbd8b02f7fe"
 #define BLE_STRING_SIZE 512
 
-static char characteristic_data = 'H';
+BLEService bleService(BLE_SERVICE_UUID);
+BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
+BLEDoubleCharacteristic bleMaxRadius(BLE_MAX_RADIUS_UUID, BLERead | BLENotify);
+BLEDoubleCharacteristic bleRadiusStepSize(BLE_RADIUS_STEP_SIZE_UUID, BLERead | BLENotify);
+BLEDoubleCharacteristic bleAzimuthStepSize(BLE_AZIMUTH_STEP_SIZE_UUID, BLERead | BLENotify);
+BLEIntCharacteristic bleMarbleSize(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify);
+BLEStringCharacteristic bleStatus(BLE_STATUS_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
+BLEStringCharacteristic bleDrawing(BLE_DRAWING_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
+BLEStringCharacteristic bleCurrentCommand(BLE_STEP_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
+BLEIntCharacteristic bleStep(BLE_MARBLE_SIZE_UUID, BLERead | BLENotify);
+BLEDoubleCharacteristic bleRadius(BLE_RADIUS_UUID, BLERead | BLENotify);
+BLEDoubleCharacteristic bleAzimuth(BLE_AZIMUTH_UUID, BLERead | BLENotify);
+BLEStringCharacteristic bleState(BLE_STATE_UUID, BLERead | BLENotify, BLE_STRING_SIZE);
 
-void deviceConnectedCallback(BLEStatus status, BLEDevice *device) {
-  (void) device;
-  switch (status) {
-    case BLE_STATUS_OK:
-      Serial.println("Device connected!");
-      break;
-    default:
-      break;
+void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
+  String command = bleCommand.value();
+  Serial.print("BLE input: ");
+  Serial.println(command);
+}
+
+void blePeripheralConnectHandler(BLEDevice central) {
+  String address = central.address();
+  Serial.print("Connected event, central: ");
+  Serial.println(address);
+}
+
+void blePeripheralDisconnectHandler(BLEDevice central) {
+  String address = central.address();
+  Serial.print("Disconnected event, central: ");
+  Serial.println(address);
+}
+
+void setStringValue(BLECharacteristic &characteristic, const String &value) {
+  String val = value;
+  if (val.length() > BLE_STRING_SIZE) {
+    val = val.substring(0, BLE_STRING_SIZE);
   }
+
+  characteristic.writeValue(val.c_str(), false);
 }
 
-void deviceDisconnectedCallback(BLEDevice * device) {
-  hci_con_handle_t handle = device->getHandle();
-  Serial.print("Disconnected BLE Device - ");
-  Serial.println(handle);
+void setDoubleValue(BLECharacteristic &characteristic, const double value) {
+  byte arr[8];
+  memcpy(arr, (uint8_t *) &value, 8);
+  characteristic.writeValue(arr, 8, false);
 }
 
-/** 
-  * In BTstack, the Read Callback is first called to query the size of the Characteristic Value, before it is called to
-  * provide the data. Both times, the size has to be returned. The data is only stored in the provided buffer, if the
-  * buffer arguement is not NULL. If more than one dynamic Characteristics is used, the value handle is used to distinguish them.
-  */
-uint16_t gattReadCallback(uint16_t value_handle, uint8_t * buffer, uint16_t buffer_size) {
-  (void) value_handle;
-  (void) buffer_size;
-  if (buffer) {
-    Serial.print("gattReadCallback, value: ");
-    Serial.println(characteristic_data, HEX);
-    buffer[0] = characteristic_data;
+void setIntValue(BLECharacteristic &characteristic, const int value) {
+  byte arr[4];
+  memcpy(arr, (uint8_t *) &value, 4);
+  characteristic.writeValue(arr, 4, false);
+}
+
+
+void setupBluetooth() {
+  int bleBegin = BLE.begin();
+  if (!bleBegin) {
+    Serial.print(" BLE Start failed - ");
+    Serial.println(bleBegin);
+
+    while (true);
+  } else {
+    // set advertised local name and service UUID:
+    BLE.setLocalName(BLE_DEVICE_NAME);
+    BLE.setAdvertisedService(bleService);
   }
-  return 1;
+
+  bleService.addCharacteristic(bleMaxRadius);
+  bleService.addCharacteristic(bleRadiusStepSize);
+  bleService.addCharacteristic(bleAzimuthStepSize);
+  bleService.addCharacteristic(bleMarbleSize);
+  bleService.addCharacteristic(bleStatus);
+  bleService.addCharacteristic(bleDrawing);
+  bleService.addCharacteristic(bleCurrentCommand);
+  bleService.addCharacteristic(bleStep);
+  bleService.addCharacteristic(bleRadius);
+  bleService.addCharacteristic(bleAzimuth);
+  bleService.addCharacteristic(bleState);
+  bleService.addCharacteristic(bleCommand);
+  bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
+  bleCommand.setValue("");
+
+  setDoubleValue(bleMaxRadius, 1000);
+  setIntValue(bleMarbleSize, 650);
+  setDoubleValue(bleRadiusStepSize, 0.0);
+  setDoubleValue(bleAzimuthStepSize, 0.0);
+  setStringValue(bleDrawing, "-");
+  setStringValue(bleCurrentCommand, "-");
+  setIntValue(bleStep, 0);
+  setDoubleValue(bleRadius, 0.0);
+  setDoubleValue(bleAzimuth, 0.0);
+  setStringValue(bleState, "Testing");
+  setStringValue(bleStatus, "Just started");
+
+  BLE.addService(bleService);
+  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
+  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
 }
 
-/**
-  * When the remove device writes a Characteristic Value, the Write callback is called. The buffer arguments points to the data of size size/ If more than one dynamic Characteristics is used, the value handle is used to distinguish them.
-  */
-int gattWriteCallback(uint16_t value_handle, uint8_t *buffer, uint16_t size) {
-  (void) value_handle;
-  (void) size;
-  characteristic_data = buffer[0];
-  Serial.print("gattWriteCallback , value ");
-  Serial.println(characteristic_data, HEX);
-  return 0;
+void startBluetooth() {
+  Serial.println("Calling Bluetooth Setup");
+  BLE.advertise();
+  Serial.println("BLE waiting for connections");
+}
+
+void bluetoothLoop() {
+  BLE.poll();
 }

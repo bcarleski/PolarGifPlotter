@@ -1,34 +1,15 @@
 #include "secrets.h"
 #include "constants.h"
-
 #include <PolarPlotterCore.h>
 #include "backgroundMotorCoordinator.h"
-#include "safeStatus.h"
-
-SafePrinter printer;
+#include "bleFunctions.h"
 
 #if USE_CLOUD > 0
-#include <WiFiNINA.h>
 #include "httpDrawingProducer.h"
-
-const String drawingsHost = DRAWINGS_HOST;
-const int drawingsPort = DRAWINGS_PORT;
-const String drawingsFile = DRAWINGS_FILE;
-const String drawingPathPrefix = DRAWING_PATH_PREFIX;
-
-WiFiClient wifiClient;
-HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
 HttpDrawingProducer drawings(printer, httpClient, drawingsFile, drawingPathPrefix);
 #else
 #include "drawingProducer.h"
 KnownDrawingProducer drawings(printer);
-#endif
-#if USE_BLE > 0
-BLEService bleService(BLE_SERVICE_UUID);
-BLEStringCharacteristic bleCommand(BLE_COMMAND_UUID, BLEWrite | BLERead, BLE_STRING_SIZE);
-SafeStatus status(printer, bleService);
-#else
-SafeStatus status(printer);
 #endif
 
 const double maxRadius = MAX_RADIUS;
@@ -42,138 +23,76 @@ unsigned long backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
 unsigned long drawingUpdateAttempt = 0;
 unsigned long nextWifiCheckTime = 0;
 unsigned long currentMillis = 0;
-unsigned long nextInputCheckTime = 0;
+unsigned long nextSerialCheckTime = 0;
 bool bleInitialized = false;
 bool bleAdvertising = false;
 
+
+
+// ####################################################################################################
+// #                                              SETUP                                               #
+// ####################################################################################################
 void setup() {
+  rp2040.idleOtherCore();
+
   printer.init();
-  startBackgroundThread(printer, &coordinator);
+  coordinator.init();
+  plotter.onRecalibrate(performRecalibrate);
+
   delay(2000);
-
-  bleInitialize(true);
-
+  bleInit();
   status.init();
 
   printer.println("Starting Setup");
   status.status("START SETUP");
 
-  plotter.onRecalibrate(performRecalibrate);
-
-  if (DEFAULT_DEBUG_LEVEL > 0) {
-    String cmd = ".D";
-    plotter.addCommand(cmd + DEFAULT_DEBUG_LEVEL);
-  }
-
-#if USE_BLE > 0
-  status.setMaxRadius(maxRadius);
-  status.setMarbleSizeInRadiusSteps(marbleSizeInRadiusSteps);
-  status.setRadiusStepSize(0.0);
-  status.setAzimuthStepSize(0.0);
-  status.setCurrentDrawing("-");
-  status.setCurrentCommand("-");
-  status.setCurrentStep(0);
-  status.setPosition(0, 0);
-  status.setState("Initializing");
-  bleService.addCharacteristic(bleCommand);
-  BLE.addService(bleService);
-  BLE.setEventHandler(BLEConnected, blePeripheralConnectHandler);
-  BLE.setEventHandler(BLEDisconnected, blePeripheralDisconnectHandler);
-  bleCommand.setEventHandler(BLEWritten, bleCommandWritten);
-  bleCommand.setValue("");
-#endif
-
-  bleAdvertise();
-
   String cmd = ".M";  // Start manual
+  bleAdvertise();
   plotter.addCommand(cmd);
+  rp2040.restartCore1();
 
   printer.println("Finished Setup");
   status.status("FINISHED SETUP");
 }
 
+void setup1() {
+  sleep_ms(2000);
+  coordinator.backgroundInit();
+
+  sleep_ms(2000);
+  coordinator.backgroundBegin();
+  sleep_ms(2000);
+}
+
+
+
+
+// ####################################################################################################
+// #                                               LOOP                                               #
+// ####################################################################################################
 void loop() {
   currentMillis = millis();
-  if (currentMillis >= 0) return;
 
-  if (currentMillis >= nextInputCheckTime) {
-    handleSerialInput();
-#if USE_BLE > 0
-    BLE.poll();
-#endif
-
-    currentMillis = millis();
-    nextInputCheckTime = currentMillis + INPUT_CHECK_WAIT_TIME;
-  }
+  handleSerialInput();
+  bleLoop(currentMillis);
 
   if (plotter.canCycle()) {
     plotter.performCycle();
   } else {
-#if USE_CLOUD > 0
     getCommands();
-#else
-    tryGetDrawingUpdate();
-#endif
   }
 }
 
-const bool isBleConnected() {
-#if USE_BLE > 0
-  return BLE.connected();
-#else
-  return false;
-#endif
+void loop1() {
+  coordinator.backgroundLoop();
 }
 
-void bleInitialize(bool holdOnFailure) {
-  if (bleInitialized) return;
 
-#if USE_BLE > 0
-  printer.println("Starting BLE");
-  int bleBegin = BLE.begin();
-  if (!bleBegin) {
-    printer.print(" BLE Start failed - ");
-    printer.println(bleBegin);
 
-    while (holdOnFailure);
-  } else {
-    // set advertised local name and service UUID:
-    BLE.setLocalName(BLE_DEVICE_NAME);
-    BLE.setAdvertisedService(bleService);
-  }
-#endif
-  bleInitialized = true;
-}
 
-void bleAdvertise() {
-  if (!bleInitialized || bleAdvertising) return;
-
-#if USE_BLE > 0
-  // start advertising
-  BLE.advertise();
-  printer.println("BLE waiting for connections");
-#endif
-}
-
-void bleDestroy() {
-  if (!bleInitialized) return;
-
-#if USE_BLE > 0
-  if (BLE.connected()) {
-    printer.println("BLE disconnecting");
-    BLE.disconnect();
-  }
-
-  if (bleAdvertising) {
-    printer.println("BLE stopping advertise");
-    BLE.stopAdvertise();
-  }
-#endif
-
-  bleAdvertising = false;
-  bleInitialized = false;
-}
-
+// ####################################################################################################
+// #                                             HELPERS                                              #
+// ####################################################################################################
 void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSteps) {
   const double maxRadius = MAX_RADIUS;
   double radiusStepSize = maxRadius / maxRadiusSteps;
@@ -184,6 +103,9 @@ void performRecalibrate(const int maxRadiusSteps, const int fullCircleAzimuthSte
 
 void handleSerialInput() {
 #if USE_SERIAL > 0
+  if (nextSerialCheckTime > currentMillis) return;
+
+  nextSerialCheckTime += INPUT_CHECK_WAIT_TIME;
   if (Serial && Serial.available()) {
     String command = Serial.readStringUntil('\n');
     printer.print("Serial input: ");
@@ -215,28 +137,8 @@ bool tryGetDrawingUpdate() {
   return true;
 }
 
-#if USE_BLE > 0
-void bleCommandWritten(BLEDevice central, BLECharacteristic characteristic) {
-  String command = bleCommand.value();
-  printer.println("BLE input: " + command);
-  plotter.addCommand(command);
-}
-
-void blePeripheralConnectHandler(BLEDevice central) {
-  // central connected event handler
-  printer.print("Connected event, central: ");
-  printer.println(central.address());
-}
-
-void blePeripheralDisconnectHandler(BLEDevice central) {
-  // central disconnected event handler
-  printer.print("Disconnected event, central: ");
-  printer.println(central.address());
-}
-#endif
-
-#if USE_CLOUD > 0
 void getCommands() {
+#if USE_CLOUD > 0
   if (currentMillis < nextWifiCheckTime) return;
 
   if (backoffDelay == INITIAL_BACKOFF_DELAY_MILLIS) {
@@ -248,8 +150,12 @@ void getCommands() {
   } else {
     doBackoffDelay();
   }
+#else
+  tryGetDrawingUpdate();
+#endif
 }
 
+#if USE_CLOUD > 0
 void doBackoffDelay() {
   nextWifiCheckTime = currentMillis + backoffDelay;
 

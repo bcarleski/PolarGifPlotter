@@ -1,5 +1,15 @@
+#include "constants.h"
 #include <ArduinoHttpClient.h>
 #include "drawingProducer.h"
+#include <WiFiNINA.h>
+
+const String drawingsHost = DRAWINGS_HOST;
+const int drawingsPort = DRAWINGS_PORT;
+const String drawingsFile = DRAWINGS_FILE;
+const String drawingPathPrefix = DRAWING_PATH_PREFIX;
+
+WiFiClient wifiClient;
+HttpClient httpClient(wifiClient, drawingsHost, drawingsPort);
 
 class HttpDrawingProducer : public DrawingProducer {
 private:
@@ -70,8 +80,8 @@ protected:
   }
 
 public:
-  HttpDrawingProducer(SafePrinter printer, HttpClient& client, const String& drawingsFile, const String& drawingPathPrefix)
-    : client(client),
+  HttpDrawingProducer(SafePrinter printer)
+    : client(httpClient),
       drawingsFile(drawingsFile),
       drawingPathPrefix(drawingPathPrefix),
       DrawingProducer(printer) {}

@@ -54,7 +54,7 @@ void loop() {
 
   if (nextBleTime <= currentStepTime) {
     bluetoothLoop();
-    nextBleTime += 500;
+    nextBleTime += 100;
   }
 }
 
@@ -67,27 +67,4 @@ void loop1() {
   } else {
     sleep_ms(40);
   }
-}
-
-void setupBluetooth() {
-  BTstack.setBLEDeviceConnectedCallback(deviceConnectedCallback);
-  BTstack.setBLEDeviceDisconnectedCallback(deviceDisconnectedCallback);
-  BTstack.setGATTCharacteristicRead(gattReadCallback);
-  BTstack.setGATTCharacteristicWrite(gattWriteCallback);
-
-  BTstack.addGATTService(new UUID("B8E06067-62AD-41BA-9231-206AE80AB551"));
-  BTstack.addGATTCharacteristic(new UUID("f897177b-aee8-4767-8ecc-cc694fd5fcef"), ATT_PROPERTY_READ, "This is a String!");
-  BTstack.addGATTCharacteristicDynamic(new UUID("f897177b-aee8-4767-8ecc-cc694fd5fce0"), ATT_PROPERTY_READ | ATT_PROPERTY_WRITE | ATT_PROPERTY_NOTIFY, 0);
-}
-
-void startBluetooth() {
-  Serial.println("Calling Bluetooth Setup");
-  BTstack.setup();
-
-  Serial.println("Starting Bluetooth Advertising");
-  BTstack.startAdvertising();
-}
-
-void bluetoothLoop() {
-  BTstack.loop();
 }

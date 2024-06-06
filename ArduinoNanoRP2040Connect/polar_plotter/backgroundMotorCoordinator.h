@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "polarMotorCoordinator.h"
 #include "tmcStepDirMotor.h"
+#include "pico/stdlib.h"
 #include "pico/util/queue.h"
 #include "pico/multicore.h"
 #include "safePrinter.h"
@@ -43,10 +44,6 @@ typedef struct {
   long azimuth;
 } ResultEntry;
 
-queue_t command_queue;
-queue_t step_queue;
-queue_t result_queue;
-
 class BackgroundMotorCoordinator : public PolarMotorCoordinator {
 private:
   SafePrinter printer;
@@ -59,24 +56,27 @@ private:
   Step backgroundPosition;
   Step backgroundProgress;
   Step backgroundStep;
+  queue_t commandQueue;
+  queue_t stepQueue;
+  queue_t resultQueue;
 
   void addCommandEntry(BackgroundAction action, const unsigned long stepInterval) {
     CommandEntry entry = { action, stepInterval };
-    queue_try_add(&command_queue, &entry);
+    queue_try_add(&commandQueue, &entry);
   }
   void addStepEntry(const long radiusStep, const long azimuthStep, const bool fastStep) {
     StepEntry entry = { radiusStep, azimuthStep, fastStep };
-    queue_try_add(&step_queue, &entry);
+    queue_try_add(&stepQueue, &entry);
   }
   ResultEntry& getResult(BackgroundAction action) {
     addCommandEntry(action, 0UL);
-    queue_remove_blocking(&result_queue, &result);
+    queue_remove_blocking(&resultQueue, &result);
 
     return result;
   }
   void sendResult(bool boolean, unsigned long interval, long radius, long azimuth) {
     ResultEntry entry = { boolean, interval, radius, azimuth };
-    queue_try_add(&result_queue, &entry);
+    queue_try_add(&resultQueue, &entry);
   }
 
 public:
@@ -86,12 +86,16 @@ public:
       radius(TmcStepDirMotor(_radiusDriverAddress, _radiusStepPin, _radiusDirPin)),
       azimuth(TmcStepDirMotor(_azimuthDriverAddress, _azimuthStepPin, _azimuthDirPin)),
       backgroundCoordinator(PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER)),
-      PolarMotorCoordinator(&radius, &azimuth, 1, MINIMUM_INTERVAL, MAXIMUM_INTERVAL, SLOW_STEP_MULTIPLIER) {}
+      PolarMotorCoordinator(NULL, NULL, 0, 0, 0, 0.0) {}
 
-  void init() {}
+  void init() {
+    queue_init(&commandQueue, sizeof(CommandEntry), COMMAND_QUEUE_ENTRIES);
+    queue_init(&stepQueue, sizeof(StepEntry), STEP_QUEUE_ENTRIES);
+    queue_init(&resultQueue, sizeof(ResultEntry), 1);
+  }
   void begin() {}
   bool canAddSteps() {
-    return !queue_is_full(&step_queue);
+    return !queue_is_full(&stepQueue);
   }
   void changeStepInterval(const unsigned long interval) {
     addCommandEntry(BACKGROUND_ACTION_CHANGE_STEP_INTERVAL, interval);
@@ -116,7 +120,7 @@ public:
     addCommandEntry(BACKGROUND_ACTION_STOP, 0UL);
   }
   bool isMoving() {
-    return !queue_is_empty(&step_queue) || getResult(BACKGROUND_ACTION_IS_MOVING).boolean;
+    return !queue_is_empty(&stepQueue) || getResult(BACKGROUND_ACTION_IS_MOVING).boolean;
   }
 
   unsigned long getStepInterval() {
@@ -148,7 +152,7 @@ public:
     backgroundCoordinator.begin();
   }
   void backgroundLoop() {
-    if (queue_try_remove(&command_queue, &command)) {
+    if (queue_try_remove(&commandQueue, &command)) {
       Step stp;
       bool boolean;
       unsigned long interval;
@@ -194,36 +198,10 @@ public:
       }
     }
 
-    if (backgroundCoordinator.canAddSteps() && queue_try_remove(&step_queue, &step)) {
+    if (backgroundCoordinator.canAddSteps() && queue_try_remove(&stepQueue, &step)) {
       backgroundCoordinator.addSteps(step.radiusStep, step.azimuthStep, step.fastStep);
     }
 
     backgroundCoordinator.move();
   }
 };
-
-BackgroundMotorCoordinator* bgCoordinator;
-
-void backgroundThreadEntry() {
-  bgCoordinator->backgroundInit();
-  sleep_ms(2000);
-  bgCoordinator->backgroundBegin();
-  sleep_ms(2000);
-
-  while (true) {
-    bgCoordinator->backgroundLoop();
-  }
-}
-
-void startBackgroundThread(SafePrinter& printer, BackgroundMotorCoordinator* _bgCoordinator) {
-  bgCoordinator = _bgCoordinator;
-  printer.println("Initializing command queue");
-  queue_init(&command_queue, sizeof(CommandEntry), COMMAND_QUEUE_ENTRIES);
-  printer.println("Initializing step queue");
-  queue_init(&step_queue, sizeof(StepEntry), STEP_QUEUE_ENTRIES);
-  printer.println("Initializing result queue");
-  queue_init(&result_queue, sizeof(ResultEntry), 1);
-
-  printer.println("Starting background thread");
-  multicore_launch_core1(backgroundThreadEntry);
-}

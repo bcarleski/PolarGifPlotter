@@ -22,17 +22,19 @@ public:
   size_t write(uint8_t c) {
 #if USE_SERIAL > 0
     if (Serial) {
-      Serial.write(c);
+      return Serial.write(c);
     }
 #endif
+    return 0;
   }
 
   size_t write(const uint8_t* str, size_t len) {
 #if USE_SERIAL > 0
     if (Serial) {
-      Serial.write(str, len);
+      return Serial.write(str, len);
     }
 #endif
+    return 0;
   }
   using Print::write;  // pull in write(str) and write(buf, size) from Print
   using Print::print;
