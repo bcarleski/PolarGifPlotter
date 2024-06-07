@@ -31,6 +31,13 @@ const data : {device:undefined|BluetoothDevice, supported:boolean, disabled:bool
   error: ''
 })
 
+const formattedStatus = computed(() => {
+  if (deviceProperties.status && deviceProperties.status.startsWith("JSON=")) {
+    return JSON.stringify(JSON.parse(deviceProperties.status.substring(5)), null, 2)
+  }
+
+  return deviceProperties.status
+})
 const isWorkingState = computed(() => {
   return deviceProperties.state === 'Wiping' || deviceProperties.state === 'Retrieving Commands' || deviceProperties.state === 'Drawing' || deviceProperties.state === 'Paused' || deviceProperties.state === 'Resuming'
 })
