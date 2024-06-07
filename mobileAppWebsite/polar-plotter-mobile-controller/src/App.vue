@@ -19,21 +19,24 @@ const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSi
   radius: 0,
   azimuth: 0,
   state: 'Unknown',
-  status: '',
+  status: 'JSON={"Coordinator":{"Mov":0,"Int":20000,"Pos":{"R":0,"A":0,"F":1},"Prg":{"R":0,"A":0,"F":0},"Stp":{"R":0,"A":0,"F":0}},"State":4,"LastState":"Initializing","Drawing":"","CommandCount":0,"CommandIndex":0,"CalibrationRadiusSteps":0,"CalibrationAzimuthSteps":0}',
   sendCmd: undefined
 })
 
-const data : {device:undefined|BluetoothDevice, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
-  device: undefined,
+const data : {device:undefined|BluetoothDevice|string, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
+  device: 'undefined',
   supported: navigator && 'bluetooth' in navigator,
   disabled: false,
   message: '',
   error: ''
 })
 
+const statusIsFormatted = computed(() => {
+  return deviceProperties.status && deviceProperties.status.startsWith("JSON=")
+})
 const formattedStatus = computed(() => {
-  if (deviceProperties.status && deviceProperties.status.startsWith("JSON=")) {
-    return JSON.stringify(JSON.parse(deviceProperties.status.substring(5)), null, 2)
+  if (statusIsFormatted) {
+    return JSON.stringify(JSON.parse(deviceProperties.status.substring(5)), null, 2).replace(/\n/g, '<br/>').replace(/ /g, '&nbsp;')
   }
 
   return deviceProperties.status
@@ -176,7 +179,8 @@ async function sendCommand(cmd: string) {
         <div>Step: {{ deviceProperties.currentStep }}</div>
         <div>Radius: {{ deviceProperties.radius }}</div>
         <div>Azimuth: {{ azimuthDegrees }}&deg;</div>
-        <div>Status: {{ deviceProperties.status }}</div>
+        <div v-if="statusIsFormatted">Status: <span v-html="formattedStatus"></span></div>
+        <div v-else>Status: {{ formattedStatus }}</div>
         <div v-if="deviceProperties.state === 'Initializing'">
           <InitializingState />
         </div>

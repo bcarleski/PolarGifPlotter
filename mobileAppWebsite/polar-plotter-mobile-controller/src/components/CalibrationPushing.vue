@@ -29,6 +29,9 @@
   <div>
     <button @click="emit('sendCommand', '.M')" :disabled="disabled">Manual</button>
   </div>
+  <div>
+    <button @click="emit('sendCommand', '.S')" :disabled="disabled">Get Status</button>
+  </div>
 </template>
 
 <style scoped>

@@ -11,6 +11,9 @@
   <button @click="emit('sendCommand', '.W')" :disabled="disabled">Wipe</button>
   <button @click="emit('sendCommand', '.C')" :disabled="disabled">Calibrate</button>
   <button @click="emit('sendCommand', '.M')" :disabled="disabled">Manual</button>
+  <div>
+    <button @click="emit('sendCommand', '.S')" :disabled="disabled">Get Status</button>
+  </div>
 </template>
 
 <style scoped>
