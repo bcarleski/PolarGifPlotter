@@ -80,7 +80,7 @@ protected:
   }
 
 public:
-  HttpDrawingProducer(SafePrinter printer)
+  HttpDrawingProducer(SafePrinter& printer)
     : client(httpClient),
       drawingsFile(drawingsFile),
       drawingPathPrefix(drawingPathPrefix),

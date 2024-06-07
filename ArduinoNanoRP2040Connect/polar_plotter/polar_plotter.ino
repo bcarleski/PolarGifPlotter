@@ -4,6 +4,9 @@
 #include "backgroundMotorCoordinator.h"
 #include "bleFunctions.h"
 
+SafePrinter printer;
+SafeStatus status(printer);
+
 #if USE_CLOUD > 0
 #include "httpDrawingProducer.h"
 HttpDrawingProducer drawings(printer, httpClient, drawingsFile, drawingPathPrefix);
@@ -12,9 +15,7 @@ HttpDrawingProducer drawings(printer, httpClient, drawingsFile, drawingPathPrefi
 KnownDrawingProducer drawings(printer);
 #endif
 
-const double maxRadius = MAX_RADIUS;
-const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
-
+PolarBle bluetooth(printer, status);
 BackgroundMotorCoordinator coordinator(printer, RADIUS_ADDRESS, RADIUS_STEP_PIN, RADIUS_DIR_PIN,
                                        AZIMUTH_ADDRESS, AZIMUTH_STEP_PIN, AZIMUTH_DIR_PIN);
 PlotterController plotter(printer, status, maxRadius, marbleSizeInRadiusSteps, &coordinator);
@@ -33,6 +34,7 @@ bool bleAdvertising = false;
 // #                                              SETUP                                               #
 // ####################################################################################################
 void setup() {
+  rp2040.enableDoubleResetBootloader();
   rp2040.idleOtherCore();
 
   printer.init();
@@ -40,14 +42,13 @@ void setup() {
   plotter.onRecalibrate(performRecalibrate);
 
   delay(2000);
-  bleInit();
-  status.init();
+  bluetooth.init();
 
   printer.println("Starting Setup");
   status.status("START SETUP");
 
   String cmd = ".M";  // Start manual
-  bleAdvertise();
+  advertiseBluetooth(&bluetooth, handleCommand);
   plotter.addCommand(cmd);
   rp2040.restartCore1();
 
@@ -74,7 +75,7 @@ void loop() {
   currentMillis = millis();
 
   handleSerialInput();
-  bleLoop(currentMillis);
+  bluetooth.loop(currentMillis);
 
   if (plotter.canCycle()) {
     plotter.performCycle();
@@ -110,31 +111,13 @@ void handleSerialInput() {
     String command = Serial.readStringUntil('\n');
     printer.print("Serial input: ");
     printer.println(command);
-    plotter.addCommand(command);
+    handleCommand(command);
   }
 #endif
 }
 
-bool tryGetDrawingUpdate() {
-  drawingUpdateAttempt++;
-  String attempt = "ATTEMPT: ";
-  printer.println("Attempting to get drawing update");
-  status.status("Updating Drawing", attempt + drawingUpdateAttempt);
-
-  if (!drawings.tryGetNewDrawing()) return false;
-
-  String drawing = drawings.getDrawing();
-  int commandCount = drawings.getCommandCount();
-
-  printer.println("    New Drawing: " + drawing + " (" + commandCount + " commands)");
-  plotter.newDrawing(drawing);
-
-  for (int i = 0; i < commandCount; i++) {
-    String command = drawings.getCommand(i);
-    plotter.addCommand(command);
-  }
-
-  return true;
+void handleCommand(String& command) {
+  plotter.addCommand(command);
 }
 
 void getCommands() {
@@ -144,14 +127,14 @@ void getCommands() {
   if (backoffDelay == INITIAL_BACKOFF_DELAY_MILLIS) {
     status.save();
   }
-  if ((WiFi.status() == WL_CONNECTED || tryConnectWiFi()) && tryGetDrawingUpdate()) {
+  if ((WiFi.status() == WL_CONNECTED || tryConnectWiFi()) && drawings.tryGetNewDrawing(status, plotter)) {
     status.restore();
     backoffDelay = INITIAL_BACKOFF_DELAY_MILLIS;
   } else {
     doBackoffDelay();
   }
 #else
-  tryGetDrawingUpdate();
+  drawings.tryGetNewDrawing(status, plotter);
 #endif
 }
 

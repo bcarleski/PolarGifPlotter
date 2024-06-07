@@ -18,18 +18,9 @@ private:
   String drawing;
   String commands[MAX_COMMANDS];
   int commandCount;
+  int drawingUpdateAttempt;
 
-protected:
-  JsonDocument doc;
-  SafePrinter printer;
-  virtual String* getNextDrawing() = 0;
-  void setDrawingName(String& name) {
-    drawing = name;
-  }
-
-public:
-  DrawingProducer(SafePrinter printer) : printer(printer) {}
-  bool tryGetNewDrawing() {
+  bool tryGetDrawing() {
     drawing = "UNKNOWN";
 
     String* drawingPointer = getNextDrawing();
@@ -58,6 +49,44 @@ public:
     doc.clear();
 
     return commandCount > 0;
+  }
+
+protected:
+  JsonDocument doc;
+  SafePrinter& printer;
+  virtual String* getNextDrawing() = 0;
+  void setDrawingName(String& name) {
+    drawing = name;
+  }
+
+public:
+  DrawingProducer(SafePrinter& printer) : printer(printer) {}
+  bool tryGetNewDrawing(SafeStatus& status, PlotterController& plotter) {
+    drawingUpdateAttempt++;
+    String attempt = "ATTEMPT: ";
+    attempt += drawingUpdateAttempt;
+    printer.println("Attempting to get drawing update");
+    status.status("Updating Drawing", attempt);
+
+    if (!tryGetDrawing()) return false;
+
+    String drawing = getDrawing();
+    int commandCount = getCommandCount();
+
+    String drawingSummary = "    New Drawing: ";
+    drawingSummary += drawing;
+    drawingSummary += " (";
+    drawingSummary += commandCount;
+    drawingSummary += " commands)";
+    printer.println(drawingSummary);
+    plotter.newDrawing(drawing);
+
+    for (int i = 0; i < commandCount; i++) {
+      String command = getCommand(i);
+      plotter.addCommand(command);
+    }
+
+    return true;
   }
   String getDrawing() {
     return drawing;
@@ -92,7 +121,7 @@ protected:
   using DrawingProducer::setDrawingName;
 
 public:
-  KnownDrawingProducer(SafePrinter printer) : DrawingProducer(printer) {}
+  KnownDrawingProducer(SafePrinter& printer) : DrawingProducer(printer) {}
   using DrawingProducer::tryGetNewDrawing;
   using DrawingProducer::getDrawing;
   using DrawingProducer::getCommandCount;

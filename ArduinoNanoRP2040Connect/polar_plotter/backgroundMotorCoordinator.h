@@ -46,7 +46,7 @@ typedef struct {
 
 class BackgroundMotorCoordinator : public PolarMotorCoordinator {
 private:
-  SafePrinter printer;
+  SafePrinter& printer;
   PolarMotorCoordinator backgroundCoordinator;
   TmcStepDirMotor radius;
   TmcStepDirMotor azimuth;
@@ -80,7 +80,7 @@ private:
   }
 
 public:
-  BackgroundMotorCoordinator(SafePrinter printer, const int _radiusDriverAddress, const int _radiusStepPin, const int _radiusDirPin,
+  BackgroundMotorCoordinator(SafePrinter& printer, const int _radiusDriverAddress, const int _radiusStepPin, const int _radiusDirPin,
                              const int _azimuthDriverAddress, const int _azimuthStepPin, const int _azimuthDirPin)
     : printer(printer),
       radius(TmcStepDirMotor(_radiusDriverAddress, _radiusStepPin, _radiusDirPin)),

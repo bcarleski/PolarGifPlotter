@@ -1,8 +1,7 @@
 #ifndef _POLAR_PLOTTER_CONSTANTS_
 #define _POLAR_PLOTTER_CONSTANTS_
 
-#define USE_LCD 0
-#define USE_BLE 0
+#define USE_BLE 1
 #define USE_CLOUD 0
 #define USE_SERIAL 1
 
@@ -44,8 +43,10 @@
 #define AZIMUTH_DIR_PIN 17
 
 #define MAX_RADIUS 1000
-
 #define MARBLE_SIZE_IN_RADIUS_STEPS 650
+
+const double maxRadius = MAX_RADIUS;
+const double marbleSizeInRadiusSteps = MARBLE_SIZE_IN_RADIUS_STEPS;
 
 #define INITIAL_BACKOFF_DELAY_MILLIS 500UL
 #define MAX_BACKOFF_DELAY_MILLIS 300000UL
