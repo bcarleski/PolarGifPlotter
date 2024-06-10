@@ -19,12 +19,12 @@ const deviceProperties : {maxRadius:number, radiusStepSize:number, azimuthStepSi
   radius: 0,
   azimuth: 0,
   state: 'Unknown',
-  status: 'JSON={"Coordinator":{"Mov":0,"Int":20000,"Pos":{"R":0,"A":0,"F":1},"Prg":{"R":0,"A":0,"F":0},"Stp":{"R":0,"A":0,"F":0}},"State":4,"LastState":"Initializing","Drawing":"","CommandCount":0,"CommandIndex":0,"CalibrationRadiusSteps":0,"CalibrationAzimuthSteps":0}',
+  status: 'Unknown',
   sendCmd: undefined
 })
 
-const data : {device:undefined|BluetoothDevice|string, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
-  device: 'undefined',
+const data : {device:undefined|BluetoothDevice, supported:boolean, disabled:boolean, message:string, error:string} = reactive({
+  device: undefined,
   supported: navigator && 'bluetooth' in navigator,
   disabled: false,
   message: '',
