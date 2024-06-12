@@ -117,6 +117,11 @@ void handleSerialInput() {
 }
 
 void handleCommand(String& command) {
+  if (command.equalsIgnoreCase(".RESTART")) {
+    printer.println("RESTARTING");
+    delay(1000);
+    rp2040.reboot();
+  }
   plotter.addCommand(command);
 }
 
