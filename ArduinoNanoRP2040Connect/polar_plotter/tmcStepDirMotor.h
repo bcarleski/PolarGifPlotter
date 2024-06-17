@@ -1,13 +1,8 @@
 #include <TMCStepper.h>
 #include "stepDirMotor.h"
-#include "pico/time.h"
 
 #define SERIAL_PORT Serial1  // HardwareSerial port pins 0 & 1
 #define R_SENSE 0.11f
-
-void delayMicros(unsigned long micros) {
-  sleep_us(micros);
-}
 
 class TmcStepDirMotor : public StepDirMotor {
 private:
@@ -28,5 +23,5 @@ protected:
 public:
   TmcStepDirMotor(const int _driverAddress, const int _stepPin, const int _dirPin)
     : driver(TMC2209Stepper(&SERIAL_PORT, R_SENSE, _driverAddress)),
-      StepDirMotor(_stepPin, _dirPin, delayMicros) {}
+      StepDirMotor(_stepPin, _dirPin) {}
 };
